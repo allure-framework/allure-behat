@@ -1,15 +1,21 @@
 <?php
+/**
+ * Copyright (c) Eduard Sukharev
+ * Apache 2.0 License. See LICENSE.md for full license text.
+ */
 
-namespace Yandex\Allure\Adapter;
+namespace Allure\Behat\Adapter;
 
 use Behat\Behat\Event\FeatureEvent;
 use Behat\Behat\Event\ScenarioEvent;
 use Behat\Behat\Event\StepEvent;
+use Behat\Behat\Event\SuiteEvent;
 use Behat\Behat\Formatter\FormatterInterface;
 use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Translation\Translator;
 use Throwable;
+use Yandex\Allure\Adapter\Allure;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
@@ -29,12 +35,11 @@ use Yandex\Allure\Adapter\Model\Provider;
 /**
  * @author Eduard Sukharev <eduard.sukharev@opensoftdev.ru>
  */
-class BehatAllureAdapter implements FormatterInterface
+class AllureFormatter implements FormatterInterface
 {
     private $translator;
     private $parameters;
     private $uuid;
-    private $suiteName;
 
     /**
      * @var Exception|Throwable
@@ -56,9 +61,8 @@ class BehatAllureAdapter implements FormatterInterface
             'language'              => $defaultLanguage,
             'output'                => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
             'ignored_annotations'   => array(),
+            'delete_previous_results'   => true,
         ));
-
-        $this->prepareOutputDirectory($this->parameters->get('output'));
 
         AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
     }
@@ -131,6 +135,7 @@ class BehatAllureAdapter implements FormatterInterface
     public static function getSubscribedEvents()
     {
         $events = array(
+            'beforeSuite',
             'beforeFeature',
             'afterFeature',
             'beforeScenario',
@@ -142,6 +147,14 @@ class BehatAllureAdapter implements FormatterInterface
         );
 
         return array_combine($events, $events);
+    }
+
+    /**
+     * @param SuiteEvent $suiteEvent
+     */
+    public function beforeSuite(SuiteEvent $suiteEvent)
+    {
+        $this->prepareOutputDirectory($this->parameters->get('output'));
     }
 
     /**
@@ -157,7 +170,6 @@ class BehatAllureAdapter implements FormatterInterface
         $event->setTitle($feature->getTitle());
 
         $this->uuid = $event->getUuid();
-        $this->suiteName = $suiteName;
 
         Allure::lifecycle()->fire($event);
     }
