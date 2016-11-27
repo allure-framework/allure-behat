@@ -1,0 +1,26 @@
+{
+    "name":         "behat/behat-allure",
+    "description":  "Behat output formatter adapter for use with Yandex Allure reporting tool",
+    "keywords":     ["BDD", "Behat", "Allure"],
+    "license":      "MIT",
+    "authors":      [
+        {
+            "name":      "Eduard Sukharev",
+            "email":     "sukharev.eh@gmail.com"
+        }
+    ],
+
+    "require": {
+        "php": ">=5.5",
+        "allure-framework/allure-php-api": "~1.0.0"
+    },
+    "require-dev": {
+        "behat/behat": "~2.5"
+    },
+
+    "autoload": {
+        "psr-0": {
+            "": "src/"
+        }
+    }
+}
