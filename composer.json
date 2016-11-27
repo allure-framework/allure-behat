@@ -1,5 +1,5 @@
 {
-    "name":         "behat/behat-allure",
+    "name":         "allure-framework/allure-behat",
     "description":  "Behat output formatter adapter for use with Yandex Allure reporting tool",
     "keywords":     ["BDD", "Behat", "Allure"],
     "license":      "MIT",
