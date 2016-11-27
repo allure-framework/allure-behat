@@ -191,24 +191,20 @@ class BehatAllureAdapter implements FormatterInterface
     {
         switch ($scenarioEvent->getResult()) {
             case StepEvent::FAILED:
-                $event = new TestCaseFailedEvent();
-                $event->withException($this->exception)->withMessage($this->exception->getMessage());
+                $this->addTestCaseFailed();
                 break;
             case StepEvent::UNDEFINED:
-                $event = new TestCaseBrokenEvent();
-                $event->withException($this->exception)->withMessage($this->exception->getMessage());
+                $this->addTestCaseBroken();
                 break;
             case StepEvent::PENDING:
             case StepEvent::SKIPPED:
-                $event = new TestCaseCanceledEvent();
+                $this->addTestCaseCancelled();
                 break;
-            case StepEvent::PASSED:
             default:
-                $event = new TestCaseFinishedEvent();
+                $this->exception = null;
         }
-        $this->exception = null;
 
-        Allure::lifecycle()->fire($event);
+        $this->addTestCaseFinished();
     }
 
     /**
@@ -262,6 +258,37 @@ class BehatAllureAdapter implements FormatterInterface
     private function addFailedStep()
     {
         $event = new StepFailedEvent();
+
+        Allure::lifecycle()->fire($event);
+    }
+
+    private function addTestCaseFinished()
+    {
+        $this->exception;
+
+        $event = new TestCaseFinishedEvent();
+        Allure::lifecycle()->fire($event);
+    }
+
+    private function addTestCaseCancelled()
+    {
+        $event = new TestCaseCanceledEvent();
+
+        Allure::lifecycle()->fire($event);
+    }
+
+    private function addTestCaseBroken()
+    {
+        $event = new TestCaseBrokenEvent();
+        $event->withException($this->exception)->withMessage($this->exception->getMessage());
+
+        Allure::lifecycle()->fire($event);
+    }
+
+    private function addTestCaseFailed()
+    {
+        $event = new TestCaseFailedEvent();
+        $event->withException($this->exception)->withMessage($this->exception->getMessage());
 
         Allure::lifecycle()->fire($event);
     }
