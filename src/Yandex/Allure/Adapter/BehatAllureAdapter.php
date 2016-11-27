@@ -5,14 +5,11 @@ namespace Yandex\Allure\Adapter;
 use Behat\Behat\Event\FeatureEvent;
 use Behat\Behat\Event\ScenarioEvent;
 use Behat\Behat\Event\StepEvent;
-use Behat\Behat\Event\SuiteEvent;
 use Behat\Behat\Formatter\FormatterInterface;
 use Exception;
-use LogicException;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Translation\Translator;
 use Throwable;
-use Yandex\Allure\Adapter\Annotation\AnnotationManager;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
@@ -22,7 +19,6 @@ use Yandex\Allure\Adapter\Event\TestCaseBrokenEvent;
 use Yandex\Allure\Adapter\Event\TestCaseCanceledEvent;
 use Yandex\Allure\Adapter\Event\TestCaseFailedEvent;
 use Yandex\Allure\Adapter\Event\TestCaseFinishedEvent;
-use Yandex\Allure\Adapter\Event\TestCasePendingEvent;
 use Yandex\Allure\Adapter\Event\TestCaseStartedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
@@ -58,54 +54,28 @@ class BehatAllureAdapter implements FormatterInterface
 
         $this->parameters = new ParameterBag(array(
             'language'              => $defaultLanguage,
-            'verbose'               => false,
-            'decorated'             => true,
-            'time'                  => true,
-            'base_path'             => null,
-            'support_path'          => null,
-            'output'                => null,
-            'output_path'           => null,
-            'output_styles'         => array(),
-            'output_decorate'       => null,
-            'snippets'              => true,
-            'snippets_paths'        => false,
-            'paths'                 => true,
-            'expand'                => false,
-            'multiline_arguments'   => true,
+            'output'                => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
             'ignored_annotations'   => array(),
-            'delete_previous_results' => true,
         ));
 
+        $this->prepareOutputDirectory($this->parameters->get('output'));
 
-        $ignoredAnnotations = $this->parameters->get('ignored_annotations');
-        $deletePreviousResults = $this->parameters->get('delete_previous_results');
-
-        if (!isset($outputDirectory)) {
-            $outputDirectory = 'build' . DIRECTORY_SEPARATOR . 'allure-results';
-        }
-        $this->prepareOutputDirectory($outputDirectory, $deletePreviousResults);
-
-        // Add standard PHPUnit annotations
-//        AnnotationProvider::addIgnoredAnnotations($this->ignoredAnnotations);
-        // Add custom ignored annotations
-        AnnotationProvider::addIgnoredAnnotations($ignoredAnnotations);
+        AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
     }
 
     /**
      * @param $outputDirectory
-     * @param $deletePreviousResults
      */
-    public function prepareOutputDirectory($outputDirectory, $deletePreviousResults)
+    private function prepareOutputDirectory($outputDirectory)
     {
         if (!file_exists($outputDirectory)) {
             mkdir($outputDirectory, 0755, true);
         }
-        if ($deletePreviousResults) {
-            $files = glob($outputDirectory . DIRECTORY_SEPARATOR . '{,.}*', GLOB_BRACE);
-            foreach ($files as $file) {
-                if (is_file($file)) {
-                    unlink($file);
-                }
+
+        $files = glob($outputDirectory . DIRECTORY_SEPARATOR . '{,.}*', GLOB_BRACE);
+        foreach ($files as $file) {
+            if (is_file($file)) {
+                unlink($file);
             }
         }
         if (is_null(Provider::getOutputDirectory())) {
