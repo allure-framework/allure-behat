@@ -4,7 +4,7 @@
  * Apache 2.0 License. See LICENSE.md for full license text.
  */
 
-namespace Allure\Behat\Adapter;
+namespace Allure\Behat\Formatter;
 
 use Behat\Behat\Event\FeatureEvent;
 use Behat\Behat\Event\ScenarioEvent;
@@ -38,7 +38,9 @@ use Yandex\Allure\Adapter\Model\Provider;
 class AllureFormatter implements FormatterInterface
 {
     private $translator;
+
     private $parameters;
+
     private $uuid;
 
     /**
@@ -46,12 +48,8 @@ class AllureFormatter implements FormatterInterface
      */
     private $exception;
 
-    /**
-     * @param string $outputDirectory XML files output directory
-     * @param bool $deletePreviousResults Whether to delete previous results on return
-     * @param array $ignoredAnnotations Extra annotaions to ignore in addition to standard PHPUnit annotations
-     */
-    public function __construct() {
+    public function __construct()
+    {
         $defaultLanguage = null;
         if (($locale = getenv('LANG')) && preg_match('/^([a-z]{2})/', $locale, $matches)) {
             $defaultLanguage = $matches[1];
@@ -65,26 +63,6 @@ class AllureFormatter implements FormatterInterface
         ));
 
         AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
-    }
-
-    /**
-     * @param $outputDirectory
-     */
-    private function prepareOutputDirectory($outputDirectory)
-    {
-        if (!file_exists($outputDirectory)) {
-            mkdir($outputDirectory, 0755, true);
-        }
-
-        $files = glob($outputDirectory . DIRECTORY_SEPARATOR . '{,.}*', GLOB_BRACE);
-        foreach ($files as $file) {
-            if (is_file($file)) {
-                unlink($file);
-            }
-        }
-        if (is_null(Provider::getOutputDirectory())) {
-            Provider::setOutputDirectory($outputDirectory);
-        }
     }
 
     /**
@@ -119,9 +97,12 @@ class AllureFormatter implements FormatterInterface
     {
         $this->parameters->set($name, $value);
     }
+
     /**
      * Returns parameter name.
+     *
      * @param string $name
+     *
      * @return mixed
      */
     public function getParameter($name)
@@ -154,7 +135,7 @@ class AllureFormatter implements FormatterInterface
      */
     public function beforeSuite(SuiteEvent $suiteEvent)
     {
-        $this->prepareOutputDirectory($this->parameters->get('output'));
+        $this->prepareOutputDirectory($this->parameters->get('output'), $this->parameters->get('delete_previous_results'));
     }
 
     /**
@@ -250,6 +231,29 @@ class AllureFormatter implements FormatterInterface
             case StepEvent::PASSED:
             default:
                 $this->addFinishedStep();
+        }
+    }
+
+    /**
+     * @param string $outputDirectory
+     * @param boolean $deletePreviousResults
+     */
+    private function prepareOutputDirectory($outputDirectory, $deletePreviousResults)
+    {
+        if (!file_exists($outputDirectory)) {
+            mkdir($outputDirectory, 0755, true);
+        }
+
+        if ($deletePreviousResults) {
+            $files = glob($outputDirectory . DIRECTORY_SEPARATOR . '{,.}*', GLOB_BRACE);
+            foreach ($files as $file) {
+                if (is_file($file)) {
+                    unlink($file);
+                }
+            }
+        }
+        if (is_null(Provider::getOutputDirectory())) {
+            Provider::setOutputDirectory($outputDirectory);
         }
     }
 

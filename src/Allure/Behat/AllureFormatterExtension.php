@@ -15,16 +15,17 @@ class AllureFormatterExtension implements ExtensionInterface
     /**
      * Loads a specific configuration.
      *
-     * @param array            $config    Extension configuration hash (from behat.yml)
+     * @param array $config Extension configuration hash (from behat.yml)
      * @param ContainerBuilder $container ContainerBuilder instance
      */
     public function load(array $config, ContainerBuilder $container)
     {
         $container->setParameter(
             'behat.formatter.classes',
-            array('allure' => 'Allure\Behat\Adapter\AllureFormatter')
+            array('allure' => 'Allure\Behat\Formatter\AllureFormatter')
         );
     }
+
     /**
      * Setups configuration for current extension.
      *
@@ -33,14 +34,10 @@ class AllureFormatterExtension implements ExtensionInterface
     public function getConfig(ArrayNodeDefinition $builder)
     {
         $builder
-            ->children()
-                ->scalarNode('output')->defaultValue('build' . DIRECTORY_SEPARATOR . 'allure-results')->end()
-                ->arrayNode('ignored_annotations')
-                ->end()
-                ->booleanNode('delete_previous_results')->defaultValue(true)->end()
-            ->end()
-        ;
+            ->useAttributeAsKey('name')
+            ->prototype('variable');
     }
+
     /**
      * Returns compiler passes used by this extension.
      *
