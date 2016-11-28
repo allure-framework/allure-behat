@@ -5,7 +5,7 @@ reporting tool.
 
 ### 1.0 Milestones:
 
- - [ ] Fix `Without Behavior` and `Without story` report issue
- - [ ] Add proper extension parametrization
+ - [x] Fix `Without Behavior` and `Without story` report issue
+ - [x] Add proper extension parametrization
  - [ ] Test with background and scenario outlines
  - [ ] Test on existing project

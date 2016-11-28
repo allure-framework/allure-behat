@@ -30,6 +30,7 @@ use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
 use Yandex\Allure\Adapter\Model\Description;
 use Yandex\Allure\Adapter\Model\DescriptionType;
+use Yandex\Allure\Adapter\Model\Label;
 use Yandex\Allure\Adapter\Model\Provider;
 
 /**
@@ -149,6 +150,7 @@ class AllureFormatter implements FormatterInterface
         $description = new Description(DescriptionType::TEXT, $feature->getDescription());
         $event->setDescription($description);
         $event->setTitle($feature->getTitle());
+        $event->setLabels(array(Label::feature($feature->getTitle())));
 
         $this->uuid = $event->getUuid();
 
@@ -170,9 +172,14 @@ class AllureFormatter implements FormatterInterface
     {
         $scenario = $scenarioEvent->getScenario();
         $testTitle = $scenario->getTitle();
-        $scenarioName = sprintf('%s: %s', $scenario->getKeyword(), $testTitle);
+        $scenarioName = sprintf('%s:%d', $scenario->getFile(), $scenario->getLine());
         $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
         $event->setTitle($testTitle);
+        foreach ($scenario->getTags() as $tag) {
+            $labels[] = Label::story($tag);
+        }
+
+        $event->setLabels($labels);
 
         Allure::lifecycle()->fire($event);
     }
@@ -193,6 +200,7 @@ class AllureFormatter implements FormatterInterface
             case StepEvent::SKIPPED:
                 $this->addTestCaseCancelled();
                 break;
+            case StepEvent::PASSED:
             default:
                 $this->exception = null;
         }
@@ -215,23 +223,24 @@ class AllureFormatter implements FormatterInterface
     public function afterStep(StepEvent $stepEvent)
     {
         switch ($stepEvent->getResult()) {
-            case StepEvent::SKIPPED:
-                $this->addCanceledStep();
-                break;
-            case StepEvent::UNDEFINED:
-                $this->exception = $stepEvent->getException();
-                // break omitted intentionally
-            case StepEvent::PENDING:
-                $this->addCanceledStep();
-                break;
             case StepEvent::FAILED:
                 $this->exception = $stepEvent->getException();
                 $this->addFailedStep();
                 break;
+            case StepEvent::UNDEFINED:
+                $this->exception = $stepEvent->getException();
+                $this->addFailedStep();
+                break;
+            case StepEvent::PENDING:
+            case StepEvent::SKIPPED:
+                $this->addCanceledStep();
+                break;
             case StepEvent::PASSED:
             default:
-                $this->addFinishedStep();
+                $this->exception = null;
         }
+
+        $this->addFinishedStep();
     }
 
     /**
