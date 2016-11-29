@@ -45,6 +45,7 @@ use Yandex\Allure\Adapter\Model\Description;
 use Yandex\Allure\Adapter\Model\DescriptionType;
 use Yandex\Allure\Adapter\Model\Label;
 use Yandex\Allure\Adapter\Model\Provider;
+use Yandex\Allure\Adapter\Model\SeverityLevel;
 
 /**
  * @author Eduard Sukharev <eduard.sukharev@opensoftdev.ru>
@@ -73,10 +74,10 @@ class AllureFormatter implements FormatterInterface
             'language'              => $defaultLanguage,
             'output'                => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
             'ignored_annotations'   => array(),
+            'tags_prefix_story'     => 'Story',
+            'tags_prefix_severity'  => 'Severity',
             'delete_previous_results'   => true,
         ));
-
-        AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
     }
 
     /**
@@ -149,6 +150,7 @@ class AllureFormatter implements FormatterInterface
      */
     public function beforeSuite(SuiteEvent $suiteEvent)
     {
+        AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
         $this->prepareOutputDirectory($this->parameters->get('output'), $this->parameters->get('delete_previous_results'));
     }
 
@@ -184,17 +186,23 @@ class AllureFormatter implements FormatterInterface
     public function beforeScenario(ScenarioEvent $scenarioEvent)
     {
         $scenario = $scenarioEvent->getScenario();
-        $testTitle = $scenario->getTitle();
         $scenarioName = sprintf('%s:%d', $scenario->getFile(), $scenario->getLine());
         $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
-        $event->setTitle($testTitle);
+        $labels = [];
         foreach ($scenario->getTags() as $tag) {
-            $labels[] = Label::story($tag);
+            if ($storyPrefix = $this->getParameter('tags_prefix_story')) {
+                if (stripos($tag, $storyPrefix) === 0) {
+                    $labels[] = Label::story(substr($tag, strlen($storyPrefix)));
+                }
+            }
+            if ($severityPrefix = $this->getParameter('tags_prefix_severity')) {
+                if (stripos($tag, $severityPrefix) === 0) {
+                    $labels[] = Label::severity(substr($tag, strlen($severityPrefix)));
+                }
+            }
         }
 
-        $event->setLabels($labels);
-
-        Allure::lifecycle()->fire($event);
+        Allure::lifecycle()->fire($event->withTitle($scenario->getTitle())->withLabels($labels));
     }
 
     /**
