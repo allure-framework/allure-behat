@@ -141,7 +141,6 @@ class AllureFormatter implements FormatterInterface
             'afterFeature',
             'beforeScenario',
             'afterScenario',
-//            'beforeBackground', 'afterBackground',
             'beforeOutlineExample',
             'afterOutlineExample',
             'beforeStep',
@@ -335,7 +334,8 @@ class AllureFormatter implements FormatterInterface
     /**
      * @param ScenarioNode $scenario
      *
-     * @return Label[]
+     * @return array|Label[]
+     * @throws Exception
      */
     private function getLabelsForScenario(ScenarioNode $scenario)
     {
@@ -356,7 +356,7 @@ class AllureFormatter implements FormatterInterface
 
                         $labels[] = Label::severity($parsedSeverity);
                     } catch (AllureException $e) {
-                        // silently skip this tag
+                        throw new Exception('Incorrect severity tag value: ' . $e->getMessage());
                     }
                 }
             }
