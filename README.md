@@ -27,7 +27,8 @@ To install using composer, add `"allure-framework/allure-behat"` to `composer.js
 
  - [x] Fix `Without Behavior` and `Without story` report issue
  - [x] Add proper extension parametrization
- - [ ] Test with background and scenario outlines
+ - [ ] Test with background
+ - [x] Test with scenario outlines
  - [ ] Test on existing project
 
 ### Feedback

@@ -20,15 +20,18 @@
 namespace Allure\Behat\Formatter;
 
 use Behat\Behat\Event\FeatureEvent;
+use Behat\Behat\Event\OutlineExampleEvent;
 use Behat\Behat\Event\ScenarioEvent;
 use Behat\Behat\Event\StepEvent;
 use Behat\Behat\Event\SuiteEvent;
 use Behat\Behat\Formatter\FormatterInterface;
+use Behat\Gherkin\Node\ScenarioNode;
 use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Translation\Translator;
 use Throwable;
 use Yandex\Allure\Adapter\Allure;
+use Yandex\Allure\Adapter\AllureException;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
@@ -41,11 +44,13 @@ use Yandex\Allure\Adapter\Event\TestCaseFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestCaseStartedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
+use Yandex\Allure\Adapter\Model\ConstantChecker;
 use Yandex\Allure\Adapter\Model\Description;
 use Yandex\Allure\Adapter\Model\DescriptionType;
 use Yandex\Allure\Adapter\Model\Label;
+use Yandex\Allure\Adapter\Model\Parameter;
+use Yandex\Allure\Adapter\Model\ParameterKind;
 use Yandex\Allure\Adapter\Model\Provider;
-use Yandex\Allure\Adapter\Model\SeverityLevel;
 
 /**
  * @author Eduard Sukharev <eduard.sukharev@opensoftdev.ru>
@@ -71,12 +76,12 @@ class AllureFormatter implements FormatterInterface
         }
 
         $this->parameters = new ParameterBag(array(
-            'language'              => $defaultLanguage,
-            'output'                => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
-            'ignored_annotations'   => array(),
-            'tags_prefix_story'     => 'Story',
-            'tags_prefix_severity'  => 'Severity',
-            'delete_previous_results'   => true,
+            'language' => $defaultLanguage,
+            'output' => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
+            'ignored_annotations' => array(),
+            'tags_prefix_story' => 'Story',
+            'tags_prefix_severity' => 'Severity',
+            'delete_previous_results' => true,
         ));
     }
 
@@ -136,8 +141,9 @@ class AllureFormatter implements FormatterInterface
             'afterFeature',
             'beforeScenario',
             'afterScenario',
-//            'beforeBackground', 'afterBackground', 'beforeOutline', 'afterOutline',
-//            'beforeOutlineExample', 'afterOutlineExample',
+//            'beforeBackground', 'afterBackground',
+            'beforeOutlineExample',
+            'afterOutlineExample',
             'beforeStep',
             'afterStep',
         );
@@ -151,7 +157,10 @@ class AllureFormatter implements FormatterInterface
     public function beforeSuite(SuiteEvent $suiteEvent)
     {
         AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
-        $this->prepareOutputDirectory($this->parameters->get('output'), $this->parameters->get('delete_previous_results'));
+        $this->prepareOutputDirectory(
+            $this->parameters->get('output'),
+            $this->parameters->get('delete_previous_results')
+        );
     }
 
     /**
@@ -188,21 +197,33 @@ class AllureFormatter implements FormatterInterface
         $scenario = $scenarioEvent->getScenario();
         $scenarioName = sprintf('%s:%d', $scenario->getFile(), $scenario->getLine());
         $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
-        $labels = [];
-        foreach ($scenario->getTags() as $tag) {
-            if ($storyPrefix = $this->getParameter('tags_prefix_story')) {
-                if (stripos($tag, $storyPrefix) === 0) {
-                    $labels[] = Label::story(substr($tag, strlen($storyPrefix)));
-                }
-            }
-            if ($severityPrefix = $this->getParameter('tags_prefix_severity')) {
-                if (stripos($tag, $severityPrefix) === 0) {
-                    $labels[] = Label::severity(substr($tag, strlen($severityPrefix)));
-                }
-            }
-        }
+
+        $labels = $this->getLabelsForScenario($scenario);
 
         Allure::lifecycle()->fire($event->withTitle($scenario->getTitle())->withLabels($labels));
+    }
+
+    public function beforeOutlineExample(OutlineExampleEvent $outlineExampleEvent)
+    {
+        $scenarioOutline = $outlineExampleEvent->getOutline();
+        $parameters = $parametersAsString = [];
+        $examplesRow = $scenarioOutline->getExamples()->getHash();
+        foreach ($examplesRow[$outlineExampleEvent->getIteration()] as $name => $value) {
+            $parameters[] = new Parameter($name, $value, ParameterKind::ARGUMENT);
+            $parametersAsString[] = sprintf('%s = %s', $name, $value);
+        }
+        $scenarioName = sprintf(
+            '%s:%d [%s]',
+            $scenarioOutline->getFile(),
+            $scenarioOutline->getLine(),
+            trim(implode(' | ', $parametersAsString), '| ')
+        );
+        $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
+        $event->setParameters($parameters);
+
+        $labels = $this->getLabelsForScenario($scenarioOutline);
+
+        Allure::lifecycle()->fire($event->withTitle($scenarioOutline->getTitle())->withLabels($labels));
     }
 
     /**
@@ -211,6 +232,30 @@ class AllureFormatter implements FormatterInterface
     public function afterScenario(ScenarioEvent $scenarioEvent)
     {
         switch ($scenarioEvent->getResult()) {
+            case StepEvent::FAILED:
+                $this->addTestCaseFailed();
+                break;
+            case StepEvent::UNDEFINED:
+                $this->addTestCaseBroken();
+                break;
+            case StepEvent::PENDING:
+            case StepEvent::SKIPPED:
+                $this->addTestCaseCancelled();
+                break;
+            case StepEvent::PASSED:
+            default:
+                $this->exception = null;
+        }
+
+        $this->addTestCaseFinished();
+    }
+
+    /**
+     * @param OutlineExampleEvent $outlineExampleEvent
+     */
+    public function afterOutlineExample(OutlineExampleEvent $outlineExampleEvent)
+    {
+        switch ($outlineExampleEvent->getResult()) {
             case StepEvent::FAILED:
                 $this->addTestCaseFailed();
                 break;
@@ -285,6 +330,39 @@ class AllureFormatter implements FormatterInterface
         if (is_null(Provider::getOutputDirectory())) {
             Provider::setOutputDirectory($outputDirectory);
         }
+    }
+
+    /**
+     * @param ScenarioNode $scenario
+     *
+     * @return Label[]
+     */
+    private function getLabelsForScenario(ScenarioNode $scenario)
+    {
+        $labels = [];
+        foreach ($scenario->getTags() as $tag) {
+            if ($storyPrefix = $this->getParameter('tags_prefix_story')) {
+                if (stripos($tag, $storyPrefix) === 0) {
+                    $labels[] = Label::story(substr($tag, strlen($storyPrefix)));
+                }
+            }
+            if ($severityPrefix = $this->getParameter('tags_prefix_severity')) {
+                if (stripos($tag, $severityPrefix) === 0) {
+                    try {
+                        $parsedSeverity = substr($tag, strlen($severityPrefix));
+
+                        // TODO: remove when allure-php-api adapter starts validating input values by itself
+                        ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $parsedSeverity);
+
+                        $labels[] = Label::severity($parsedSeverity);
+                    } catch (AllureException $e) {
+                        // silently skip this tag
+                    }
+                }
+            }
+        }
+
+        return $labels;
     }
 
     private function addCanceledStep()
