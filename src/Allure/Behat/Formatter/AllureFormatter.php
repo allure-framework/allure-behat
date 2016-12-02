@@ -19,20 +19,28 @@
 
 namespace Allure\Behat\Formatter;
 
-use Behat\Behat\Event\FeatureEvent;
 use Behat\Behat\Event\OutlineExampleEvent;
 use Behat\Behat\Event\ScenarioEvent;
 use Behat\Behat\Event\StepEvent;
 use Behat\Behat\Event\SuiteEvent;
 use Behat\Behat\Formatter\FormatterInterface;
+use Behat\Gherkin\Node\FeatureNode;
+use Behat\Gherkin\Node\OutlineNode;
 use Behat\Gherkin\Node\ScenarioNode;
+use DateTime;
 use Exception;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
 use Symfony\Component\Translation\Translator;
 use Throwable;
 use Yandex\Allure\Adapter\Allure;
 use Yandex\Allure\Adapter\AllureException;
+use Yandex\Allure\Adapter\Annotation\AnnotationManager;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
+use Yandex\Allure\Adapter\Annotation\Description;
+use Yandex\Allure\Adapter\Annotation\Features;
+use Yandex\Allure\Adapter\Annotation\Parameter;
+use Yandex\Allure\Adapter\Annotation\Severity;
+use Yandex\Allure\Adapter\Annotation\Stories;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
 use Yandex\Allure\Adapter\Event\StepFinishedEvent;
@@ -44,12 +52,7 @@ use Yandex\Allure\Adapter\Event\TestCaseFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestCaseStartedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
-use Yandex\Allure\Adapter\Model\ConstantChecker;
-use Yandex\Allure\Adapter\Model\Description;
 use Yandex\Allure\Adapter\Model\DescriptionType;
-use Yandex\Allure\Adapter\Model\Label;
-use Yandex\Allure\Adapter\Model\Parameter;
-use Yandex\Allure\Adapter\Model\ParameterKind;
 use Yandex\Allure\Adapter\Model\Provider;
 
 /**
@@ -78,9 +81,8 @@ class AllureFormatter implements FormatterInterface
         $this->parameters = new ParameterBag(array(
             'language' => $defaultLanguage,
             'output' => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
-            'ignored_annotations' => array(),
-            'tags_prefix_story' => 'Story',
-            'tags_prefix_severity' => 'Severity',
+            'ignored_tags' => array(),
+            'severity_tag_prefix' => 'severity_',
             'delete_previous_results' => true,
         ));
     }
@@ -137,8 +139,7 @@ class AllureFormatter implements FormatterInterface
     {
         $events = array(
             'beforeSuite',
-            'beforeFeature',
-            'afterFeature',
+            'afterSuite',
             'beforeScenario',
             'afterScenario',
             'beforeOutlineExample',
@@ -155,35 +156,21 @@ class AllureFormatter implements FormatterInterface
      */
     public function beforeSuite(SuiteEvent $suiteEvent)
     {
-        AnnotationProvider::addIgnoredAnnotations($this->parameters->get('ignored_annotations'));
+        AnnotationProvider::addIgnoredAnnotations(array());
+
         $this->prepareOutputDirectory(
             $this->parameters->get('output'),
             $this->parameters->get('delete_previous_results')
         );
-    }
-
-    /**
-     * @param FeatureEvent $featureEvent
-     */
-    public function beforeFeature(FeatureEvent $featureEvent)
-    {
-        $feature = $featureEvent->getFeature();
-        $suiteName = $feature->getFile();
-        $event = new TestSuiteStartedEvent($suiteName);
-        $description = new Description(DescriptionType::TEXT, $feature->getDescription());
-        $event->setDescription($description);
-        $event->setTitle($feature->getTitle());
-        $event->setLabels(array(Label::feature($feature->getTitle())));
+        $now = new DateTime();
+        $event = new TestSuiteStartedEvent(sprintf('TestSuite-%s', $now->format('Y-m-d_His')));
 
         $this->uuid = $event->getUuid();
 
         Allure::lifecycle()->fire($event);
     }
 
-    /**
-     * @param FeatureEvent $featureEvent
-     */
-    public function afterFeature(FeatureEvent $featureEvent)
+    public function afterSuite(SuiteEvent $suiteEvent)
     {
         Allure::lifecycle()->fire(new TestSuiteFinishedEvent($this->uuid));
     }
@@ -194,35 +181,40 @@ class AllureFormatter implements FormatterInterface
     public function beforeScenario(ScenarioEvent $scenarioEvent)
     {
         $scenario = $scenarioEvent->getScenario();
+        $annotations = array_merge(
+            $this->parseFeatureAnnotations($scenarioEvent->getScenario()->getFeature()),
+            $this->parseScenarioAnnotations($scenario)
+        );
+        $annotationManager = new AnnotationManager($annotations);
+
         $scenarioName = sprintf('%s:%d', $scenario->getFile(), $scenario->getLine());
         $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
+        $annotationManager->updateTestCaseEvent($event);
 
-        $labels = $this->getLabelsForScenario($scenario);
-
-        Allure::lifecycle()->fire($event->withTitle($scenario->getTitle())->withLabels($labels));
+        Allure::lifecycle()->fire($event->withTitle($scenario->getTitle()));
     }
 
     public function beforeOutlineExample(OutlineExampleEvent $outlineExampleEvent)
     {
         $scenarioOutline = $outlineExampleEvent->getOutline();
-        $parameters = $parametersAsString = [];
-        $examplesRow = $scenarioOutline->getExamples()->getHash();
-        foreach ($examplesRow[$outlineExampleEvent->getIteration()] as $name => $value) {
-            $parameters[] = new Parameter($name, $value, ParameterKind::ARGUMENT);
-            $parametersAsString[] = sprintf('%s = %s', $name, $value);
-        }
+
         $scenarioName = sprintf(
-            '%s:%d [%s]',
+            '%s:%d [%d]',
             $scenarioOutline->getFile(),
             $scenarioOutline->getLine(),
-            trim(implode(' | ', $parametersAsString), '| ')
+            $outlineExampleEvent->getIteration()
         );
         $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
-        $event->setParameters($parameters);
 
-        $labels = $this->getLabelsForScenario($scenarioOutline);
+        $annotations = array_merge(
+            $this->parseFeatureAnnotations($scenarioOutline->getFeature()),
+            $this->parseScenarioAnnotations($scenarioOutline),
+            $this->parseExampleAnnotations($scenarioOutline, $outlineExampleEvent->getIteration())
+        );
+        $annotationManager = new AnnotationManager($annotations);
+        $annotationManager->updateTestCaseEvent($event);
 
-        Allure::lifecycle()->fire($event->withTitle($scenarioOutline->getTitle())->withLabels($labels));
+        Allure::lifecycle()->fire($event->withTitle($scenarioOutline->getTitle()));
     }
 
     /**
@@ -230,23 +222,7 @@ class AllureFormatter implements FormatterInterface
      */
     public function afterScenario(ScenarioEvent $scenarioEvent)
     {
-        switch ($scenarioEvent->getResult()) {
-            case StepEvent::FAILED:
-                $this->addTestCaseFailed();
-                break;
-            case StepEvent::UNDEFINED:
-                $this->addTestCaseBroken();
-                break;
-            case StepEvent::PENDING:
-            case StepEvent::SKIPPED:
-                $this->addTestCaseCancelled();
-                break;
-            case StepEvent::PASSED:
-            default:
-                $this->exception = null;
-        }
-
-        $this->addTestCaseFinished();
+        $this->processScenarioResult($scenarioEvent->getResult());
     }
 
     /**
@@ -254,23 +230,7 @@ class AllureFormatter implements FormatterInterface
      */
     public function afterOutlineExample(OutlineExampleEvent $outlineExampleEvent)
     {
-        switch ($outlineExampleEvent->getResult()) {
-            case StepEvent::FAILED:
-                $this->addTestCaseFailed();
-                break;
-            case StepEvent::UNDEFINED:
-                $this->addTestCaseBroken();
-                break;
-            case StepEvent::PENDING:
-            case StepEvent::SKIPPED:
-                $this->addTestCaseCancelled();
-                break;
-            case StepEvent::PASSED:
-            default:
-                $this->exception = null;
-        }
-
-        $this->addTestCaseFinished();
+        $this->processScenarioResult($outlineExampleEvent->getResult());
     }
 
     /**
@@ -332,37 +292,114 @@ class AllureFormatter implements FormatterInterface
     }
 
     /**
+     * @param integer $result
+     */
+    protected function processScenarioResult($result)
+    {
+        switch ($result) {
+            case StepEvent::FAILED:
+                $this->addTestCaseFailed();
+                break;
+            case StepEvent::UNDEFINED:
+                $this->addTestCaseBroken();
+                break;
+            case StepEvent::PENDING:
+            case StepEvent::SKIPPED:
+                $this->addTestCaseCancelled();
+                break;
+            case StepEvent::PASSED:
+            default:
+                $this->exception = null;
+        }
+
+        $this->addTestCaseFinished();
+    }
+
+    /**
+     * @param FeatureNode $featureNode
+     *
+     * @return array
+     */
+    private function parseFeatureAnnotations(FeatureNode $featureNode)
+    {
+        $feature = new Features();
+        $feature->featureNames = array($featureNode->getTitle());
+
+        $description = new Description();
+        $description->type = DescriptionType::TEXT;
+        $description->value = $featureNode->getDescription();
+
+        return [
+            $feature,
+            $description,
+        ];
+    }
+
+    /**
      * @param ScenarioNode $scenario
      *
-     * @return array|Label[]
+     * @return array
      * @throws Exception
      */
-    private function getLabelsForScenario(ScenarioNode $scenario)
+    private function parseScenarioAnnotations(ScenarioNode $scenario)
     {
-        $labels = [];
+        $annotations = [];
+        $story = new Stories();
+        $story->stories = [];
+        $ignoredTags = [];
+        $ignoredTagsParameter = $this->getParameter('ignored_tags');
+        if (is_string($ignoredTagsParameter)) {
+            $ignoredTags = array_map('trim', explode(',', $ignoredTagsParameter));
+        } elseif (is_array($ignoredTagsParameter)) {
+            $ignoredTags = $ignoredTagsParameter;
+        }
         foreach ($scenario->getTags() as $tag) {
-            if ($storyPrefix = $this->getParameter('tags_prefix_story')) {
-                if (stripos($tag, $storyPrefix) === 0) {
-                    $labels[] = Label::story(substr($tag, strlen($storyPrefix)));
-                }
+            if (in_array($tag, $ignoredTags)) {
+                continue;
             }
-            if ($severityPrefix = $this->getParameter('tags_prefix_severity')) {
+            if ($severityPrefix = $this->getParameter('severity_tag_prefix')) {
                 if (stripos($tag, $severityPrefix) === 0) {
                     try {
                         $parsedSeverity = substr($tag, strlen($severityPrefix));
 
-                        // TODO: remove when allure-php-api adapter starts validating input values by itself
-                        ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $parsedSeverity);
+                        $severity = new Severity();
+                        $severity->level = $parsedSeverity;
 
-                        $labels[] = Label::severity($parsedSeverity);
+                        $annotations[] = $severity;
+
+                        continue;
                     } catch (AllureException $e) {
-                        throw new Exception('Incorrect severity tag value: ' . $e->getMessage());
+                        // do nothing and parse it as if it were regular tag
                     }
                 }
             }
+
+            $story->stories[] = $tag;
         }
 
-        return $labels;
+        array_push($annotations, $story);
+
+        return $annotations;
+    }
+
+    /**
+     * @param OutlineNode $scenarioOutline
+     * @param integer $iteration
+     *
+     * @return array
+     */
+    private function parseExampleAnnotations(OutlineNode $scenarioOutline, $iteration)
+    {
+        $parameters = [];
+        $examplesRow = $scenarioOutline->getExamples()->getHash();
+        foreach ($examplesRow[$iteration] as $name => $value) {
+            $parameter = new Parameter();
+            $parameter->name = $name;
+            $parameter->value = $value;
+            $parameters[] = $parameter;
+        }
+
+        return $parameters;
     }
 
     private function addCanceledStep()
