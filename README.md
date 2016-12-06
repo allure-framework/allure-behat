@@ -33,6 +33,7 @@ To use Allure formatter, add `allure` to your list of formatters in `name`:
             delete_previous_results: false
             ignored_tags: javascript
             severity_tag_prefix: 'severity_'
+            issue_tag_prefix: 'bug_'
 
 ```
 Here:
@@ -41,6 +42,8 @@ Here:
  - `ignored_tags` - either a comma separated string or valid yaml array of Scenario tags to be ignored in reports
  - `severity_tag_prefix` - tag with this prefix will be interpreted (if possible) to define the Scenario severity level
  in reports (by default it's `normal`).
+ - `issue_tag_prefix` - tag with this prefix will be interpreted as Issue marker and will generate issue tracking system
+ link for test case (using [**allure.issues.tracker.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Issues))
 
 ### How does it work?
 

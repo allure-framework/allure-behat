@@ -38,6 +38,7 @@ use Yandex\Allure\Adapter\Annotation\AnnotationManager;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
 use Yandex\Allure\Adapter\Annotation\Description;
 use Yandex\Allure\Adapter\Annotation\Features;
+use Yandex\Allure\Adapter\Annotation\Issues;
 use Yandex\Allure\Adapter\Annotation\Parameter;
 use Yandex\Allure\Adapter\Annotation\Severity;
 use Yandex\Allure\Adapter\Annotation\Stories;
@@ -83,6 +84,7 @@ class AllureFormatter implements FormatterInterface
             'output' => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
             'ignored_tags' => array(),
             'severity_tag_prefix' => 'severity_',
+            'issue_tag_prefix' => 'bug_',
             'delete_previous_results' => true,
         ));
     }
@@ -346,6 +348,10 @@ class AllureFormatter implements FormatterInterface
         $annotations = [];
         $story = new Stories();
         $story->stories = [];
+
+        $issues = new Issues();
+        $issues->issueKeys = [];
+
         $ignoredTags = [];
         $ignoredTagsParameter = $this->getParameter('ignored_tags');
         if (is_string($ignoredTagsParameter)) {
@@ -374,10 +380,26 @@ class AllureFormatter implements FormatterInterface
                 }
             }
 
+            if ($issuePrefix = $this->getParameter('issue_tag_prefix')) {
+                if (stripos($tag, $issuePrefix) === 0) {
+                    $parsedIssue = substr($tag, strlen($issuePrefix));
+
+                    $issues->issueKeys[] = $parsedIssue;
+
+                    continue;
+                }
+            }
+
             $story->stories[] = $tag;
         }
 
-        array_push($annotations, $story);
+        if ($story->getStories()) {
+            array_push($annotations, $story);
+        }
+
+        if ($issues->getIssueKeys()) {
+            array_push($annotations, $issues);
+        }
 
         return $annotations;
     }
