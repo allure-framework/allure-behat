@@ -50,6 +50,7 @@ use Yandex\Allure\Adapter\Event\TestCaseBrokenEvent;
 use Yandex\Allure\Adapter\Event\TestCaseCanceledEvent;
 use Yandex\Allure\Adapter\Event\TestCaseFailedEvent;
 use Yandex\Allure\Adapter\Event\TestCaseFinishedEvent;
+use Yandex\Allure\Adapter\Event\TestCasePendingEvent;
 use Yandex\Allure\Adapter\Event\TestCaseStartedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
@@ -306,6 +307,8 @@ class AllureFormatter implements FormatterInterface
                 $this->addTestCaseBroken();
                 break;
             case StepEvent::PENDING:
+                $this->addTestCasePending();
+                break;
             case StepEvent::SKIPPED:
                 $this->addTestCaseCancelled();
                 break;
@@ -456,6 +459,13 @@ class AllureFormatter implements FormatterInterface
     private function addTestCaseCancelled()
     {
         $event = new TestCaseCanceledEvent();
+
+        Allure::lifecycle()->fire($event);
+    }
+
+    private function addTestCasePending()
+    {
+        $event = new TestCasePendingEvent();
 
         Allure::lifecycle()->fire($event);
     }
