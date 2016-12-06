@@ -42,6 +42,7 @@ use Yandex\Allure\Adapter\Annotation\Issues;
 use Yandex\Allure\Adapter\Annotation\Parameter;
 use Yandex\Allure\Adapter\Annotation\Severity;
 use Yandex\Allure\Adapter\Annotation\Stories;
+use Yandex\Allure\Adapter\Annotation\TestCaseId;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
 use Yandex\Allure\Adapter\Event\StepFinishedEvent;
@@ -85,6 +86,7 @@ class AllureFormatter implements FormatterInterface
             'ignored_tags' => array(),
             'severity_tag_prefix' => 'severity_',
             'issue_tag_prefix' => 'bug_',
+            'test_id_tag_prefix' => 'test_',
             'delete_previous_results' => true,
         ));
     }
@@ -352,6 +354,9 @@ class AllureFormatter implements FormatterInterface
         $issues = new Issues();
         $issues->issueKeys = [];
 
+        $testId = new TestCaseId();
+        $testId->testCaseIds = [];
+
         $ignoredTags = [];
         $ignoredTagsParameter = $this->getParameter('ignored_tags');
         if (is_string($ignoredTagsParameter)) {
@@ -382,9 +387,15 @@ class AllureFormatter implements FormatterInterface
 
             if ($issuePrefix = $this->getParameter('issue_tag_prefix')) {
                 if (stripos($tag, $issuePrefix) === 0) {
-                    $parsedIssue = substr($tag, strlen($issuePrefix));
+                    $issues->issueKeys[] = substr($tag, strlen($issuePrefix));
 
-                    $issues->issueKeys[] = $parsedIssue;
+                    continue;
+                }
+            }
+
+            if ($testIdPrefix = $this->getParameter('test_id_tag_prefix')) {
+                if (stripos($tag, $testIdPrefix) === 0) {
+                    $testId->testCaseIds[] = substr($tag, strlen($testIdPrefix));
 
                     continue;
                 }
@@ -399,6 +410,10 @@ class AllureFormatter implements FormatterInterface
 
         if ($issues->getIssueKeys()) {
             array_push($annotations, $issues);
+        }
+
+        if ($testId->getTestCaseIds()) {
+            array_push($annotations, $testId);
         }
 
         return $annotations;
