@@ -79,6 +79,8 @@ Behat also has tags and they are also can be used in Allure reports:
 * If a tag appears in ignored_tags configuration parameter, then it will be ignored and will not appear on Allure report
 * If a tag starts with severity_tag_prefix, then formatter will try to interpret it's affixed part as one of the possible
 [Allure Severity Levels](https://github.com/allure-framework/allure-php-adapter-api/blob/master/src/Yandex/Allure/Adapter/Model/SeverityLevel.php)
+* If a tag starts with test_id_tag_prefix, then formatter will interpret it's affixed part as
+[Test Case Id](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID) for your TMS
 * In all other cases tag will be parsed as Allure Story annotation
 
 By default, this formatter will use `build/allure-results` folder to put it's XML output to. Each Behat run will empty
