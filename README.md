@@ -44,6 +44,8 @@ Here:
  in reports (by default it's `normal`).
  - `issue_tag_prefix` - tag with this prefix will be interpreted as Issue marker and will generate issue tracking system
  link for test case (using [**allure.issues.tracker.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Issues))
+ - `test_id_tag_prefix` - tag with this prefix will be interpreted as Test Case Id marker and will generate TMS link for
+ test case (using [**allure.tests.management.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID))
 
 ### How does it work?
 
