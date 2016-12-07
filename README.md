@@ -34,6 +34,7 @@ To use Allure formatter, add `allure` to your list of formatters in `name`:
             ignored_tags: javascript
             severity_tag_prefix: 'severity_'
             issue_tag_prefix: 'bug_'
+            test_id_tag_prefix: 'test_case_'
 
 ```
 Here:
