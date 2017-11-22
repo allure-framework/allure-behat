@@ -168,7 +168,7 @@ class AllureFormatter implements FormatterInterface
             $this->parameters->get('delete_previous_results')
         );
         $now = new DateTime();
-        $event = new TestSuiteStartedEvent(sprintf('TestSuite-%s', $now->format('Y-m-d_His')));
+        $event = new TestSuiteStartedEvent(sprintf('Behat TestSuite'));
 
         $this->uuid = $event->getUuid();
 
