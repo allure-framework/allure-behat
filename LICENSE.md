@@ -2,6 +2,7 @@ Apache License
 ==============
 
 Copyright 2016 Eduard Sukharev <sukharev.eh@gmail.com>
+Copyright 2018 Tiko Lakin <tikolakin@gmail.com>
 
 _Version 2.0, January 2004_
 _&lt;<http://www.apache.org/licenses/>&gt;_
