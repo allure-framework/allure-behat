@@ -1,13 +1,13 @@
 <?php
 
-namespace Allure\Printer;
+namespace Allure\Behat\Printer;
 
 use Behat\Testwork\Output\Printer\OutputPrinter as PrinterInterface;
 
 class DummyOutputPrinter implements PrinterInterface
 {
 
-  protected $outputPath = 'build/allure-results';
+  protected $outputPath = 'allure-results';
   protected $outputStyles;
   protected $rendererFiles;
 

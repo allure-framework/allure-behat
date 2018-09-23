@@ -26,15 +26,15 @@ To use Allure formatter, add `allure` to your list of formatters in `name`
     allure:
       output_path: %paths.base%/build/allure
   extensions:
-    Allure\AllureFormatterExtension:
-      issue_tag_prefix: "JIRA"
+    Allure\Behat\AllureFormatterExtension:
       severity_key: "severity:"
-      issue_tag_prefix: "http://github.com/allure-framework/allure-core/issues/%s"
-      test_id_tag_prefix: "http://tms.yourcompany.com/tests/%s"
+      ignored_tags: "tag_ignore"
+      issue_tag_prefix: "JIRA:"
+      test_id_tag_prefix: "BUG:"
 ```
 
 Here:
- - `output_path` - defines the output dir for report XML data
+ - `output_path` - defines the output dir for report XML data. Default is `./allure-results`
  - `ignored_tags` - either a comma separated string or valid yaml array of Scenario tags to be ignored in reports
  - `severity_key` - tag with this prefix will be interpreted (if possible) to define the Scenario severity level
  in reports (by default it's `normal`).
@@ -86,5 +86,6 @@ Behat also has tags and they are also can be used in Allure reports:
 [Test Case Id](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID) for your TMS
 * In all other cases tag will be parsed as Allure Story annotation
 
-By default, this formatter will use `build/allure-results` folder to put it's XML output to. Each Behat run will empty
-that folder. To override this behavior, define `output` and `delete_previous_results` parameters respectively.
+### Contribution?
+Feel free to open PR with changes but before pls make sure you pass tests
+`./vendor/behat/behat/bin/behat`

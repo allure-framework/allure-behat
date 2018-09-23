@@ -1,6 +1,6 @@
 <?php
 
-namespace Allure;
+namespace Allure\Behat;
 
 use Behat\Testwork\Exception\ServiceContainer\ExceptionExtension;
 use Behat\Testwork\ServiceContainer\Extension as ExtensionInterface;
@@ -71,7 +71,7 @@ class AllureFormatterExtension implements ExtensionInterface
    */
   public function load(ContainerBuilder $container, array $config)
   {
-    $definition = new Definition("Allure\\Formatter\\AllureFormatter");
+    $definition = new Definition("Allure\\Behat\\Formatter\\AllureFormatter");
     $definition->addArgument($config['name']);
     $definition->addArgument($config['issue_tag_prefix']);
     $definition->addArgument($config['test_id_tag_prefix']);

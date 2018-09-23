@@ -1,9 +1,9 @@
 <?php
 
-namespace Allure\Formatter;
+namespace Allure\Behat\Formatter;
 
-use Allure\Exception\ArtifactExceptionInterface;
-use Allure\Printer\DummyOutputPrinter;
+use Allure\Behat\Exception\ArtifactExceptionInterface;
+use Allure\Behat\Printer\DummyOutputPrinter;
 use Behat\Behat\EventDispatcher\Event\AfterFeatureTested;
 use Behat\Behat\EventDispatcher\Event\AfterOutlineTested;
 use Behat\Behat\EventDispatcher\Event\AfterScenarioTested;
@@ -206,7 +206,7 @@ class AllureFormatter implements Formatter
   public function onBeforeSuiteTested(BeforeSuiteTested $event)
   {
 
-    AnnotationProvider::addIgnoredAnnotations(array());
+    AnnotationProvider::addIgnoredAnnotations([]);
     $this->prepareOutputDirectory(
       $this->printer->getOutputPath()
     );
@@ -351,28 +351,29 @@ class AllureFormatter implements Formatter
     $description = new Description();
     $description->type = DescriptionType::TEXT;
     $description->value = $featureNode->getDescription();
-    return array($this->scopeAnnotation, $description);
+    return [$this->scopeAnnotation, $description];
   }
 
   protected function parseScenarioAnnotations(ScenarioInterface $scenarioNode)
   {
 
-    $annotations = array();
+    $annotations = [];
+
     $story = new Stories();
-    $story->stories = array();
+    $story->stories = [];
 
     $issues = new Issues();
-    $issues->issueKeys = array();
+    $issues->issueKeys = [];
 
     $testId = new TestCaseId();
-    $testId->testCaseIds = array();
+    $testId->testCaseIds = [];
 
     $severity = new Severity();
 
-    $ignoredTags = array();
+    $ignoredTags = [];
 
     $title = $scenarioNode instanceof ExampleNode ? $scenarioNode->getOutlineTitle() : $scenarioNode->getTitle();
-    $story->stories[] = $title;
+    //$story->stories[] = $title;
 
     if (is_string($this->ignoredTags)) {
       $ignoredTags = array_map('trim', explode(',', $this->ignoredTags));
@@ -382,6 +383,11 @@ class AllureFormatter implements Formatter
 
     $annotation = array_merge($this->scopeAnnotation, $scenarioNode->getTags());
     foreach ($annotation as $tag) {
+
+      if (in_array($tag, $ignoredTags)) {
+        continue;
+      }
+
       if ($this->issueTagPrefix) {
         if (stripos($tag, $this->issueTagPrefix) === 0) {
           $issues->issueKeys[] = substr($tag, strlen($this->issueTagPrefix));
@@ -405,7 +411,10 @@ class AllureFormatter implements Formatter
           $severity->level = SeverityLevel::NORMAL;
         }
         array_push($annotations, $severity);
+        continue;
       }
+
+      $story->stories[] = $tag;
     }
 
     if ($story->getStories()) {
