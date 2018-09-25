@@ -1,6 +1,7 @@
 <?php
 /**
- * Copyright (c) Eduard Sukharev
+ * Copyright (c) 2016 Eduard Sukharev
+ * Copyright (c) 2018 Tiko Lakin
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -19,25 +20,34 @@
 
 namespace Allure\Behat\Formatter;
 
-use Behat\Behat\Event\OutlineExampleEvent;
-use Behat\Behat\Event\ScenarioEvent;
-use Behat\Behat\Event\StepEvent;
-use Behat\Behat\Event\SuiteEvent;
-use Behat\Behat\Formatter\FormatterInterface;
+use Allure\Behat\Exception\ArtifactExceptionInterface;
+use Allure\Behat\Printer\DummyOutputPrinter;
+use Behat\Behat\EventDispatcher\Event\AfterFeatureTested;
+use Behat\Behat\EventDispatcher\Event\AfterOutlineTested;
+use Behat\Behat\EventDispatcher\Event\AfterScenarioTested;
+use Behat\Behat\EventDispatcher\Event\AfterStepTested;
+use Behat\Behat\EventDispatcher\Event\BeforeFeatureTested;
+use Behat\Behat\EventDispatcher\Event\BeforeOutlineTested;
+use Behat\Behat\EventDispatcher\Event\BeforeScenarioTested;
+use Behat\Behat\EventDispatcher\Event\BeforeStepTested;
+use Behat\Behat\Tester\Result\StepResult;
+use Behat\Gherkin\Node\ExampleNode;
 use Behat\Gherkin\Node\FeatureNode;
-use Behat\Gherkin\Node\OutlineNode;
-use Behat\Gherkin\Node\ScenarioNode;
-use DateTime;
-use Exception;
+use Behat\Gherkin\Node\ScenarioInterface;
+use Behat\Testwork\Counter\Timer;
+use Behat\Testwork\EventDispatcher\Event\AfterExerciseCompleted;
+use Behat\Testwork\EventDispatcher\Event\AfterSuiteTested;
+use Behat\Testwork\EventDispatcher\Event\BeforeExerciseCompleted;
+use Behat\Testwork\EventDispatcher\Event\BeforeSuiteTested;
+use Behat\Testwork\Output\Formatter;
+use Behat\Testwork\Output\Printer\OutputPrinter;
+use Behat\Testwork\Tester\Result\ExceptionResult;
 use Symfony\Component\DependencyInjection\ParameterBag\ParameterBag;
-use Symfony\Component\Translation\Translator;
-use Throwable;
 use Yandex\Allure\Adapter\Allure;
 use Yandex\Allure\Adapter\AllureException;
 use Yandex\Allure\Adapter\Annotation\AnnotationManager;
 use Yandex\Allure\Adapter\Annotation\AnnotationProvider;
 use Yandex\Allure\Adapter\Annotation\Description;
-use Yandex\Allure\Adapter\Annotation\Features;
 use Yandex\Allure\Adapter\Annotation\Issues;
 use Yandex\Allure\Adapter\Annotation\Parameter;
 use Yandex\Allure\Adapter\Annotation\Severity;
@@ -55,449 +65,496 @@ use Yandex\Allure\Adapter\Event\TestCasePendingEvent;
 use Yandex\Allure\Adapter\Event\TestCaseStartedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteFinishedEvent;
 use Yandex\Allure\Adapter\Event\TestSuiteStartedEvent;
+use Yandex\Allure\Adapter\Model\ConstantChecker;
 use Yandex\Allure\Adapter\Model\DescriptionType;
 use Yandex\Allure\Adapter\Model\Provider;
+use Yandex\Allure\Adapter\Model\SeverityLevel;
+use Yandex\Allure\Adapter\Support\AttachmentSupport;
 
-/**
- * @author Eduard Sukharev <eduard.sukharev@opensoftdev.ru>
- */
-class AllureFormatter implements FormatterInterface
+class AllureFormatter implements Formatter
 {
-    private $translator;
 
-    private $parameters;
+  protected $output;
+  protected $name;
+  protected $base_path;
+  protected $timer;
+  protected $exception;
+  protected $attachment = [];
+  protected $uuid;
+  protected $issueTagPrefix;
+  protected $testIdTagPrefix;
+  protected $ignoredTags;
+  protected $severity_key;
+  protected $parameters;
+  protected $printer;
+  protected $outlineCounter = 0;
 
-    private $uuid;
+  /** @var  \Behat\Testwork\Exception\ExceptionPresenter */
+  protected $presenter;
 
-    /**
-     * @var Exception|Throwable
-     */
-    private $exception;
+  /** @var  Allure */
+  private $lifecycle;
 
-    public function __construct()
-    {
-        $defaultLanguage = null;
-        if (($locale = getenv('LANG')) && preg_match('/^([a-z]{2})/', $locale, $matches)) {
-            $defaultLanguage = $matches[1];
+  private $scopeAnnotation = [];
+
+  use AttachmentSupport;
+
+  public function __construct($name, $issue_tag_prefix, $test_id_tag_prefix, $ignoredTags, $severity_key, $base_path, $presenter)
+  {
+    $this->name = $name;
+    $this->issueTagPrefix = $issue_tag_prefix;
+    $this->testIdTagPrefix = $test_id_tag_prefix;
+    $this->ignoredTags = $ignoredTags;
+    $this->severity_key = $severity_key;
+    $this->base_path = $base_path;
+    $this->presenter = $presenter;
+    $this->timer = new Timer();
+    $this->printer = new DummyOutputPrinter();
+    $this->parameters = new ParameterBag();
+  }
+
+  private function getLifeCycle()
+  {
+    if (!isset($this->lifecycle)) {
+      $this->lifecycle = Allure::lifecycle();
+    }
+    return $this->lifecycle;
+  }
+
+  /**
+   * Returns an array of event names this subscriber wants to listen to.
+   *
+   * The array keys are event names and the value can be:
+   *
+   *  * The method name to call (priority defaults to 0)
+   *  * An array composed of the method name to call and the priority
+   *  * An array of arrays composed of the method names to call and respective
+   *    priorities, or 0 if unset
+   *
+   * For instance:
+   *
+   *  * array('eventName' => 'methodName')
+   *  * array('eventName' => array('methodName', $priority))
+   *  * array('eventName' => array(array('methodName1', $priority),
+   * array('methodName2')))
+   *
+   * @return array The event names to listen to
+   */
+  public static function getSubscribedEvents()
+  {
+    return array(
+      'tester.exercise_completed.before' => 'onBeforeExerciseCompleted',
+      'tester.exercise_completed.after' => 'onAfterExerciseCompleted',
+      'tester.suite_tested.before' => 'onBeforeSuiteTested',
+      'tester.suite_tested.after' => 'onAfterSuiteTested',
+      'tester.feature_tested.before' => 'onBeforeFeatureTested',
+      'tester.feature_tested.after' => 'onAfterFeatureTested',
+      'tester.scenario_tested.before' => 'onBeforeScenarioTested',
+      'tester.scenario_tested.after' => 'onAfterScenarioTested',
+      'tester.outline_tested.before' => 'onBeforeOutlineTested',
+      'tester.outline_tested.after' => 'onAfterOutlineTested',
+      'tester.step_tested.before' => 'onBeforeStepTested',
+      'tester.step_tested.after' => 'onAfterStepTested',
+    );
+  }
+
+  /**
+   * Returns formatter name.
+   *
+   * @return string
+   */
+  public function getName()
+  {
+    return $this->name;
+  }
+
+  /**
+   * Returns formatter description.
+   *
+   * @return string
+   */
+  public function getDescription()
+  {
+    return "Allure formatter for Behat 3";
+  }
+
+  /**
+   * Returns formatter output printer.
+   *
+   * @return OutputPrinter
+   */
+  public function getOutputPrinter()
+  {
+    return $this->printer;
+  }
+
+  /**
+   * Sets formatter parameter.
+   *
+   * @param string $name
+   * @param mixed $value
+   */
+  public function setParameter($name, $value)
+  {
+    $this->parameters->set($name, $value);
+  }
+
+  /**
+   * Returns parameter name.
+   *
+   * @param string $name
+   *
+   * @return mixed
+   */
+  public function getParameter($name)
+  {
+    return $this->parameters->get($name);
+  }
+
+  public function onBeforeExerciseCompleted(BeforeExerciseCompleted $event)
+  {
+
+  }
+
+  public function onAfterExerciseCompleted(AfterExerciseCompleted $event)
+  {
+
+  }
+
+  public function onBeforeSuiteTested(BeforeSuiteTested $event)
+  {
+
+    AnnotationProvider::addIgnoredAnnotations([]);
+    $this->prepareOutputDirectory(
+      $this->printer->getOutputPath()
+    );
+    $start_event = new TestSuiteStartedEvent($event->getSuite()->getName());
+
+    $this->uuid = $start_event->getUuid();
+
+    $this->getLifeCycle()->fire($start_event);
+  }
+
+  public function onAfterSuiteTested(AfterSuiteTested $event)
+  {
+    AnnotationProvider::registerAnnotationNamespaces();
+    $this->getLifeCycle()->fire(new TestSuiteFinishedEvent($this->uuid));
+
+  }
+
+  public function onBeforeFeatureTested(BeforeFeatureTested $event)
+  {
+
+  }
+
+  public function onAfterFeatureTested(AfterFeatureTested $event)
+  {
+
+  }
+
+  public function onBeforeScenarioTested(BeforeScenarioTested $event)
+  {
+    /** @var \Behat\Gherkin\Node\ScenarioNode $scenario */
+    $scenario = $event->getScenario();
+    /** @var \Behat\Gherkin\Node\FeatureNode $feature */
+    $feature = $event->getFeature();
+
+
+    $annotations = array_merge(
+      $this->parseFeatureAnnotations($feature),
+      $this->parseScenarioAnnotations($scenario)
+    );
+
+    $annotationManager = new AnnotationManager($annotations);
+    $scenarioName = sprintf('%s:%d', $feature->getFile(), $scenario->getLine());
+    $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
+    $annotationManager->updateTestCaseEvent($scenarioEvent);
+
+    $this->getLifeCycle()->fire($scenarioEvent->withTitle($scenario->getTitle()));
+
+  }
+
+  public function onAfterScenarioTested(AfterScenarioTested $event)
+  {
+    $this->processScenarioResult($event->getTestResult());
+  }
+
+  public function onBeforeOutlineTested(BeforeOutlineTested $event)
+  {
+    $examples = $event->getOutline()->getExamples();
+
+    if ($this->outlineCounter >= count($examples)) {
+      $this->outlineCounter = 0;
+    }
+
+    $example = $examples[$this->outlineCounter];
+    $feature = $event->getFeature();
+
+    $scenarioName = sprintf(
+      '%s:%d',
+      $feature->getFile(),
+      $example->getLine()
+    );
+
+    $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
+    $annotations = array_merge(
+      $this->parseFeatureAnnotations($feature),
+      $this->parseScenarioAnnotations($example),
+      $this->parseExampleAnnotations($example->getTokens())
+    );
+    $this->outlineCounter++;
+    $annotationManager = new AnnotationManager($annotations);
+    $annotationManager->updateTestCaseEvent($scenarioEvent);
+    $this->getLifeCycle()->fire($scenarioEvent->withTitle($example->getOutlineTitle()));
+  }
+
+  public function onAfterOutlineTested(AfterOutlineTested $event)
+  {
+    $this->processScenarioResult($event->getTestResult());
+  }
+
+  public function onBeforeStepTested(BeforeStepTested $event)
+  {
+    $step = $event->getStep();
+    $stepEvent = new StepStartedEvent($step->getText());
+    $stepEvent->withTitle(sprintf('%s %s', $step->getType(), $step->getText()));
+
+    $this->getLifeCycle()->fire($stepEvent);
+  }
+
+  public function onAfterStepTested(AfterStepTested $event)
+  {
+    $result = $event->getTestResult();
+
+    if ($result instanceof ExceptionResult && $result->hasException()) {
+      $this->exception = $result->getException();
+      if ($this->exception instanceof ArtifactExceptionInterface) {
+        $this->attachment[md5_file($this->exception->getScreenPath())] = $this->exception->getScreenPath();
+        $this->attachment[md5_file($this->exception->getHtmlPath())] = $this->exception->getHtmlPath();
+      }
+    }
+
+    switch ($event->getTestResult()->getResultCode()) {
+      case StepResult::FAILED:
+        $this->addFailedStep();
+        break;
+      case StepResult::UNDEFINED:
+        $this->addFailedStep();
+        break;
+      case StepResult::PENDING:
+      case StepResult::SKIPPED:
+        $this->addCancelledStep();
+        break;
+      case StepResult::PASSED:
+      default:
+        $this->exception = new \Exception('Error occurred out of test scope.');
+    }
+    $this->addFinishedStep();
+  }
+
+  protected function prepareOutputDirectory($outputDirectory)
+  {
+    if (!file_exists($outputDirectory)) {
+      mkdir($outputDirectory, 0755, true);
+    }
+
+    if (is_null(Provider::getOutputDirectory())) {
+      Provider::setOutputDirectory($outputDirectory);
+    }
+  }
+
+  protected function parseFeatureAnnotations(FeatureNode $featureNode)
+  {
+    $this->scopeAnnotation = $featureNode->getTags();
+    $description = new Description();
+    $description->type = DescriptionType::TEXT;
+    $description->value = $featureNode->getDescription();
+    return [$this->scopeAnnotation, $description];
+  }
+
+  protected function parseScenarioAnnotations(ScenarioInterface $scenarioNode)
+  {
+
+    $annotations = [];
+
+    $story = new Stories();
+    $story->stories = [];
+
+    $issues = new Issues();
+    $issues->issueKeys = [];
+
+    $testId = new TestCaseId();
+    $testId->testCaseIds = [];
+
+    $severity = new Severity();
+
+    $ignoredTags = [];
+
+    $title = $scenarioNode instanceof ExampleNode ? $scenarioNode->getOutlineTitle() : $scenarioNode->getTitle();
+    //$story->stories[] = $title;
+
+    if (is_string($this->ignoredTags)) {
+      $ignoredTags = array_map('trim', explode(',', $this->ignoredTags));
+    } elseif (is_array($this->ignoredTags)) {
+      $ignoredTags = $ignoredTags;
+    }
+
+    $annotation = array_merge($this->scopeAnnotation, $scenarioNode->getTags());
+    foreach ($annotation as $tag) {
+
+      if (in_array($tag, $ignoredTags)) {
+        continue;
+      }
+
+      if ($this->issueTagPrefix) {
+        if (stripos($tag, $this->issueTagPrefix) === 0) {
+          $issues->issueKeys[] = substr($tag, strlen($this->issueTagPrefix));
+          continue;
         }
+      }
 
-        $this->parameters = new ParameterBag(array(
-            'language' => $defaultLanguage,
-            'output' => 'build' . DIRECTORY_SEPARATOR . 'allure-results',
-            'ignored_tags' => array(),
-            'severity_tag_prefix' => 'severity_',
-            'issue_tag_prefix' => 'bug_',
-            'test_id_tag_prefix' => 'test_',
-            'delete_previous_results' => true,
-        ));
-    }
-
-    /**
-     * Set formatter translator.
-     *
-     * @param Translator $translator
-     */
-    public function setTranslator(Translator $translator)
-    {
-        $this->translator = $translator;
-    }
-
-    /**
-     * Checks if current formatter has parameter.
-     *
-     * @param string $name
-     *
-     * @return Boolean
-     */
-    public function hasParameter($name)
-    {
-        return $this->parameters->has($name);
-    }
-
-    /**
-     * Sets formatter parameter.
-     *
-     * @param string $name
-     * @param mixed $value
-     */
-    public function setParameter($name, $value)
-    {
-        $this->parameters->set($name, $value);
-    }
-
-    /**
-     * Returns parameter name.
-     *
-     * @param string $name
-     *
-     * @return mixed
-     */
-    public function getParameter($name)
-    {
-        return $this->parameters->get($name);
-    }
-
-    /**
-     * @return array
-     */
-    public static function getSubscribedEvents()
-    {
-        $events = array(
-            'beforeSuite',
-            'afterSuite',
-            'beforeScenario',
-            'afterScenario',
-            'beforeOutlineExample',
-            'afterOutlineExample',
-            'beforeStep',
-            'afterStep',
-        );
-
-        return array_combine($events, $events);
-    }
-
-    /**
-     * @param SuiteEvent $suiteEvent
-     */
-    public function beforeSuite(SuiteEvent $suiteEvent)
-    {
-        AnnotationProvider::addIgnoredAnnotations(array());
-
-        $this->prepareOutputDirectory(
-            $this->parameters->get('output'),
-            $this->parameters->get('delete_previous_results')
-        );
-        $now = new DateTime();
-        $event = new TestSuiteStartedEvent(sprintf('TestSuite-%s', $now->format('Y-m-d_His')));
-
-        $this->uuid = $event->getUuid();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    public function afterSuite(SuiteEvent $suiteEvent)
-    {
-        Allure::lifecycle()->fire(new TestSuiteFinishedEvent($this->uuid));
-    }
-
-    /**
-     * @param ScenarioEvent $scenarioEvent
-     */
-    public function beforeScenario(ScenarioEvent $scenarioEvent)
-    {
-        $scenario = $scenarioEvent->getScenario();
-        $annotations = array_merge(
-            $this->parseFeatureAnnotations($scenarioEvent->getScenario()->getFeature()),
-            $this->parseScenarioAnnotations($scenario)
-        );
-        $annotationManager = new AnnotationManager($annotations);
-
-        $scenarioName = sprintf('%s:%d', $scenario->getFile(), $scenario->getLine());
-        $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
-        $annotationManager->updateTestCaseEvent($event);
-
-        Allure::lifecycle()->fire($event->withTitle($scenario->getTitle()));
-    }
-
-    public function beforeOutlineExample(OutlineExampleEvent $outlineExampleEvent)
-    {
-        $scenarioOutline = $outlineExampleEvent->getOutline();
-
-        $scenarioName = sprintf(
-            '%s:%d [%d]',
-            $scenarioOutline->getFile(),
-            $scenarioOutline->getLine(),
-            $outlineExampleEvent->getIteration()
-        );
-        $event = new TestCaseStartedEvent($this->uuid, $scenarioName);
-
-        $annotations = array_merge(
-            $this->parseFeatureAnnotations($scenarioOutline->getFeature()),
-            $this->parseScenarioAnnotations($scenarioOutline),
-            $this->parseExampleAnnotations($scenarioOutline, $outlineExampleEvent->getIteration())
-        );
-        $annotationManager = new AnnotationManager($annotations);
-        $annotationManager->updateTestCaseEvent($event);
-
-        Allure::lifecycle()->fire($event->withTitle($scenarioOutline->getTitle()));
-    }
-
-    /**
-     * @param ScenarioEvent $scenarioEvent
-     */
-    public function afterScenario(ScenarioEvent $scenarioEvent)
-    {
-        $this->processScenarioResult($scenarioEvent->getResult());
-    }
-
-    /**
-     * @param OutlineExampleEvent $outlineExampleEvent
-     */
-    public function afterOutlineExample(OutlineExampleEvent $outlineExampleEvent)
-    {
-        $this->processScenarioResult($outlineExampleEvent->getResult());
-    }
-
-    /**
-     * @param StepEvent $stepEvent
-     */
-    public function beforeStep(StepEvent $stepEvent)
-    {
-        $step = $stepEvent->getStep();
-        $event = new StepStartedEvent($step->getText());
-        $event->withTitle(sprintf('%s %s', $step->getType(), $step->getText()));
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    public function afterStep(StepEvent $stepEvent)
-    {
-        switch ($stepEvent->getResult()) {
-            case StepEvent::FAILED:
-                $this->exception = $stepEvent->getException();
-                $this->addFailedStep();
-                break;
-            case StepEvent::UNDEFINED:
-                $this->exception = $stepEvent->getException();
-                $this->addFailedStep();
-                break;
-            case StepEvent::PENDING:
-            case StepEvent::SKIPPED:
-                $this->addCanceledStep();
-                break;
-            case StepEvent::PASSED:
-            default:
-                $this->exception = null;
+      if ($this->testIdTagPrefix) {
+        if (stripos($tag, $this->testIdTagPrefix) === 0) {
+          $testId->testCaseIds[] = substr($tag, strlen($this->testIdTagPrefix));
+          continue;
         }
+      }
 
-        $this->addFinishedStep();
-    }
-
-    /**
-     * @param string $outputDirectory
-     * @param boolean $deletePreviousResults
-     */
-    private function prepareOutputDirectory($outputDirectory, $deletePreviousResults)
-    {
-        if (!file_exists($outputDirectory)) {
-            mkdir($outputDirectory, 0755, true);
+      if (stripos($tag, $this->severity_key) === 0) {
+        $level = preg_replace("/$this->severity_key/", '', $tag);
+        try {
+          $level = ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $level);
+          $severity->level = $level;
+        } catch (AllureException $e) {
+          $severity->level = SeverityLevel::NORMAL;
         }
+        array_push($annotations, $severity);
+        continue;
+      }
 
-        if ($deletePreviousResults) {
-            $files = glob($outputDirectory . DIRECTORY_SEPARATOR . '{,.}*', GLOB_BRACE);
-            foreach ($files as $file) {
-                if (is_file($file)) {
-                    unlink($file);
-                }
-            }
-        }
-        if (is_null(Provider::getOutputDirectory())) {
-            Provider::setOutputDirectory($outputDirectory);
-        }
+      $story->stories[] = $tag;
     }
 
-    /**
-     * @param integer $result
-     */
-    protected function processScenarioResult($result)
-    {
-        switch ($result) {
-            case StepEvent::FAILED:
-                $this->addTestCaseFailed();
-                break;
-            case StepEvent::UNDEFINED:
-                $this->addTestCaseBroken();
-                break;
-            case StepEvent::PENDING:
-                $this->addTestCasePending();
-                break;
-            case StepEvent::SKIPPED:
-                $this->addTestCaseCancelled();
-                break;
-            case StepEvent::PASSED:
-            default:
-                $this->exception = null;
-        }
+    if ($story->getStories()) {
+      array_push($annotations, $story);
+    }
+    if ($issues->getIssueKeys()) {
+      array_push($annotations, $issues);
+    }
+    if ($testId->getTestCaseIds()) {
+      array_push($annotations, $testId);
+    }
+    return $annotations;
 
-        $this->addTestCaseFinished();
+  }
+
+  protected function processScenarioResult($result)
+  {
+
+    if ($result instanceof ExceptionResult && $result->hasException()) {
+      $this->exception = $result->getException();
     }
 
-    /**
-     * @param FeatureNode $featureNode
-     *
-     * @return array
-     */
-    private function parseFeatureAnnotations(FeatureNode $featureNode)
-    {
-        $feature = new Features();
-        $feature->featureNames = array($featureNode->getTitle());
+    switch ($result->getResultCode()) {
+      case StepResult::FAILED:
+        $this->addTestCaseFailed();
+        break;
+      case StepResult::UNDEFINED:
+        $this->addTestCaseBroken();
+        break;
+      case StepResult::PENDING:
+        $this->addTestCasePending();
+        break;
+      case StepResult::SKIPPED:
+        $this->addTestCaseCancelled();
+        break;
+      case StepResult::PASSED:
+      default:
+        $this->exception = new \Exception('Error occurred out of test scope.');
 
-        $description = new Description();
-        $description->type = DescriptionType::TEXT;
-        $description->value = $featureNode->getDescription();
+    }
+    $this->addTestCaseFinished();
+  }
 
-        return [
-            $feature,
-            $description,
-        ];
+  protected function parseExampleAnnotations(array $tokens)
+  {
+
+    $parameters = [];
+
+    foreach ($tokens as $name => $value) {
+      $parameter = new Parameter();
+      $parameter->name = $name;
+      $parameter->value = $value;
+      $parameters[] = $parameter;
     }
 
-    /**
-     * @param ScenarioNode $scenario
-     *
-     * @return array
-     * @throws Exception
-     */
-    private function parseScenarioAnnotations(ScenarioNode $scenario)
-    {
-        $annotations = [];
-        $story = new Stories();
-        $story->stories = [];
+    return $parameters;
+  }
 
-        $issues = new Issues();
-        $issues->issueKeys = [];
+  protected function addAttachments()
+  {
+    array_walk($this->attachment, function ($path, $key) {
+      $this->addAttachment($path, $key . '-attachment');
+    });
+  }
 
-        $testId = new TestCaseId();
-        $testId->testCaseIds = [];
+  private function addCancelledStep()
+  {
 
-        $ignoredTags = [];
-        $ignoredTagsParameter = $this->getParameter('ignored_tags');
-        if (is_string($ignoredTagsParameter)) {
-            $ignoredTags = array_map('trim', explode(',', $ignoredTagsParameter));
-        } elseif (is_array($ignoredTagsParameter)) {
-            $ignoredTags = $ignoredTagsParameter;
-        }
-        foreach ($scenario->getTags() as $tag) {
-            if (in_array($tag, $ignoredTags)) {
-                continue;
-            }
-            if ($severityPrefix = $this->getParameter('severity_tag_prefix')) {
-                if (stripos($tag, $severityPrefix) === 0) {
-                    try {
-                        $parsedSeverity = substr($tag, strlen($severityPrefix));
+    $event = new StepCanceledEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-                        $severity = new Severity();
-                        $severity->level = $parsedSeverity;
+  private function addFinishedStep()
+  {
 
-                        $annotations[] = $severity;
+    $event = new StepFinishedEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-                        continue;
-                    } catch (AllureException $e) {
-                        // do nothing and parse it as if it were regular tag
-                    }
-                }
-            }
+  private function addFailedStep()
+  {
 
-            if ($issuePrefix = $this->getParameter('issue_tag_prefix')) {
-                if (stripos($tag, $issuePrefix) === 0) {
-                    $issues->issueKeys[] = substr($tag, strlen($issuePrefix));
+    $event = new StepFailedEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-                    continue;
-                }
-            }
+  private function addTestCaseFinished()
+  {
 
-            if ($testIdPrefix = $this->getParameter('test_id_tag_prefix')) {
-                if (stripos($tag, $testIdPrefix) === 0) {
-                    $testId->testCaseIds[] = substr($tag, strlen($testIdPrefix));
+    $event = new TestCaseFinishedEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-                    continue;
-                }
-            }
+  private function addTestCaseCancelled()
+  {
 
-            $story->stories[] = $tag;
-        }
+    $event = new TestCaseCanceledEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-        if ($story->getStories()) {
-            array_push($annotations, $story);
-        }
+  private function addTestCasePending()
+  {
 
-        if ($issues->getIssueKeys()) {
-            array_push($annotations, $issues);
-        }
+    $event = new TestCasePendingEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-        if ($testId->getTestCaseIds()) {
-            array_push($annotations, $testId);
-        }
+  private function addTestCaseBroken()
+  {
 
-        return $annotations;
-    }
+    $event = new TestCaseBrokenEvent();
+    $this->getLifeCycle()->fire($event);
+  }
 
-    /**
-     * @param OutlineNode $scenarioOutline
-     * @param integer $iteration
-     *
-     * @return array
-     */
-    private function parseExampleAnnotations(OutlineNode $scenarioOutline, $iteration)
-    {
-        $parameters = [];
-        $examplesRow = $scenarioOutline->getExamples()->getHash();
-        foreach ($examplesRow[$iteration] as $name => $value) {
-            $parameter = new Parameter();
-            $parameter->name = $name;
-            $parameter->value = $value;
-            $parameters[] = $parameter;
-        }
+  private function addTestCaseFailed()
+  {
 
-        return $parameters;
-    }
+    $event = new TestCaseFailedEvent();
+    $event->withException($this->exception)
+      ->withMessage($this->exception->getMessage());
+    $this->addAttachments();
 
-    private function addCanceledStep()
-    {
-        $event = new StepCanceledEvent();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addFinishedStep()
-    {
-        $event = new StepFinishedEvent();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addFailedStep()
-    {
-        $event = new StepFailedEvent();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addTestCaseFinished()
-    {
-        $this->exception;
-
-        $event = new TestCaseFinishedEvent();
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addTestCaseCancelled()
-    {
-        $event = new TestCaseCanceledEvent();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addTestCasePending()
-    {
-        $event = new TestCasePendingEvent();
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addTestCaseBroken()
-    {
-        $event = new TestCaseBrokenEvent();
-        $event->withException($this->exception)->withMessage($this->exception->getMessage());
-
-        Allure::lifecycle()->fire($event);
-    }
-
-    private function addTestCaseFailed()
-    {
-        $event = new TestCaseFailedEvent();
-        $event->withException($this->exception)->withMessage($this->exception->getMessage());
-
-        Allure::lifecycle()->fire($event);
-    }
+    $this->getLifeCycle()->fire($event);
+  }
 }

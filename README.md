@@ -10,43 +10,46 @@ To install using [Composer](https://getcomposer.org/) simply add `"allure-framew
     ...
     "require": {
     ...
-        "allure-framework/allure-behat": "~1.0.0",
+        "allure-framework/allure-behat": "~2.0.0",
     ...
     },
     ...
 
 ## Usage
 
-To enable this extension in [Behat](http://behat.org/en/latest/), add it to `extensions` section of your ```behat.yml``` file:
-
-    extensions:
-        Allure\Behat\AllureFormatterExtension: ~
-
-To use Allure formatter, add `allure` to your list of formatters in `name`:
+To enable this extension in [Behat](http://behat.org/en/latest/), add it to `extensions` section of your ```behat.yml``` file
+To use Allure formatter, add `allure` to your list of formatters in `name`
 
 ```yml
-
-    formatter:
-        name: pretty,allure
-        parameters:
-            output: build/allure-report
-            delete_previous_results: false
-            ignored_tags: javascript
-            severity_tag_prefix: 'severity_'
-            issue_tag_prefix: 'bug_'
-            test_id_tag_prefix: 'test_case_'
-
+  formatters:
+    pretty: true
+    allure:
+      output_path: %paths.base%/build/allure
+  extensions:
+    Allure\Behat\AllureFormatterExtension:
+      severity_key: "severity:"
+      ignored_tags: "tag_ignore"
+      issue_tag_prefix: "JIRA:"
+      test_id_tag_prefix: "BUG:"
 ```
+
 Here:
- - `output` - defines the output dir for report XML data
- - `delete_previous_results` - defines whether to remove all files in `output` folder before test run
+ - `output_path` - defines the output dir for report XML data. Default is `./allure-results`
  - `ignored_tags` - either a comma separated string or valid yaml array of Scenario tags to be ignored in reports
- - `severity_tag_prefix` - tag with this prefix will be interpreted (if possible) to define the Scenario severity level
+ - `severity_key` - tag with this prefix will be interpreted (if possible) to define the Scenario severity level
  in reports (by default it's `normal`).
  - `issue_tag_prefix` - tag with this prefix will be interpreted as Issue marker and will generate issue tracking system
  link for test case (using [**allure.issues.tracker.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Issues))
  - `test_id_tag_prefix` - tag with this prefix will be interpreted as Test Case Id marker and will generate TMS link for
  test case (using [**allure.tests.management.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID))
+
+
+### Use attachment support
+To have attachments in allure report - make sure your behat runs tests with [Mink](https://github.com/minkphp/Mink)
+
+Allure can handle exception thrown in your Context if that exception is instance of `ArtifactExceptionInterface`
+and get screenshots path from it.
+
 
 ### How does it work?
 
@@ -69,8 +72,8 @@ On the other hand, Allure also supports grouping Test Cases by Feature, by Story
 Behat Allure formatter does the following mapping:
 
 * Behat Test Run -> Allure Test Suite
-* Behat Scenario (and every single Example in Scenario Outline, too) -> Allure Test Case
-* Behat Sentence -> Allure Test Step
+* Gherkin Scenario (and every single Example in Scenario Outline, too) -> Allure Test Case
+* Gherkin Step -> Allure Test Step
 
 Behat Scenarios are annotated with it's feature title and description to be grouped into Allure Feature.
 
@@ -83,5 +86,6 @@ Behat also has tags and they are also can be used in Allure reports:
 [Test Case Id](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID) for your TMS
 * In all other cases tag will be parsed as Allure Story annotation
 
-By default, this formatter will use `build/allure-results` folder to put it's XML output to. Each Behat run will empty
-that folder. To override this behavior, define `output` and `delete_previous_results` parameters respectively.
+### Contribution?
+Feel free to open PR with changes but before pls make sure you pass tests
+`./vendor/behat/behat/bin/behat`
