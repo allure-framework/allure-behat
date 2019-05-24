@@ -95,32 +95,44 @@ Behat also has tags and they are also can be used in Allure reports:
 You can change this standard behaviour by setting the `epic_tag_prefix`, `feature_tag_prefix` and `story_tag_prefix`.
 
 #### Example using BDD capabilities and features
-- `feature_tag_prefix= "Capability:"`
-- `story_tag_prefix= "."`
+```yml
+feature_tag_prefix: "Capability:"
+story_tag_prefix: "."
+```
 
 A `test.feature` file with the following content:
 
+```
 @Capability:Customers
     Feature: Creating new customers
+```
 
 Will report the results as:
-- Customers
--- Creating new customers
+```
+Customers
+    Creating new customers
+```
 
 #### Example using BDD business domains, capabilities and features
-- `epic_tag_prefix= "BusinessDomain:"`
-- `feature_tag_prefix= "Capability:"`
-- `story_tag_prefix= "."`
+```yml
+epic_tag_prefix: "BusinessDomain:"
+feature_tag_prefix: "Capability:"
+story_tag_prefix: "."
+```
 
 A `test.feature` file with the following content:
 
+```
 @BusinessDomain:CRM @Capability:Customers
     Feature: Creating new customers
+```
 
 Will report the results as:
-- CRM
--- Customers
---- Creating new customers
+```
+CRM
+    Customers
+        Creating new customers
+```
 
 ### Contribution?
 Feel free to open PR with changes but before pls make sure you pass tests
