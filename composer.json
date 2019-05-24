@@ -19,12 +19,12 @@
   ],
   "require": {
     "php": ">=5.5",
-    "behat/behat": "^3.3",
-    "allure-framework/allure-php-api": "~1.1.4"
+    "behat/behat": "^3.3"
   },
   "require-dev": {
     "symfony/process": "~2.5|~3.0|~4.0",
-    "phpunit/phpunit": "^4.8.36|^6.3"
+    "phpunit/phpunit": "^4.8.36|^6.3",
+    "allure-framework/allure-php-api": "~1.1.5"
   },
   "autoload": {
     "psr-0": {
