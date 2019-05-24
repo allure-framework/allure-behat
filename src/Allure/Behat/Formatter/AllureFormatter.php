@@ -52,6 +52,8 @@ use Yandex\Allure\Adapter\Annotation\Issues;
 use Yandex\Allure\Adapter\Annotation\Parameter;
 use Yandex\Allure\Adapter\Annotation\Severity;
 use Yandex\Allure\Adapter\Annotation\Stories;
+use Yandex\Allure\Adapter\Annotation\Features;
+use Yandex\Allure\Adapter\Annotation\Epics;
 use Yandex\Allure\Adapter\Annotation\TestCaseId;
 use Yandex\Allure\Adapter\Event\StepCanceledEvent;
 use Yandex\Allure\Adapter\Event\StepFailedEvent;
@@ -85,6 +87,9 @@ class AllureFormatter implements Formatter
   protected $testIdTagPrefix;
   protected $ignoredTags;
   protected $severity_key;
+  protected $epicTagPrefix;
+  protected $featureTagPrefix;
+  protected $storyTagPrefix;
   protected $parameters;
   protected $printer;
   protected $outlineCounter = 0;
@@ -99,13 +104,16 @@ class AllureFormatter implements Formatter
 
   use AttachmentSupport;
 
-  public function __construct($name, $issue_tag_prefix, $test_id_tag_prefix, $ignoredTags, $severity_key, $base_path, $presenter)
+  public function __construct($name, $issue_tag_prefix, $test_id_tag_prefix, $ignoredTags, $severity_key, $epic_tag_prefix, $feature_tag_prefix, $story_tag_prefix, $base_path, $presenter)
   {
     $this->name = $name;
     $this->issueTagPrefix = $issue_tag_prefix;
     $this->testIdTagPrefix = $test_id_tag_prefix;
     $this->ignoredTags = $ignoredTags;
     $this->severity_key = $severity_key;
+    $this->epicTagPrefix = $epic_tag_prefix;
+    $this->featureTagPrefix = $feature_tag_prefix;
+    $this->storyTagPrefix = $story_tag_prefix;
     $this->base_path = $base_path;
     $this->presenter = $presenter;
     $this->timer = new Timer();
@@ -327,7 +335,7 @@ class AllureFormatter implements Formatter
     $result = $event->getTestResult();
 
     if ($result instanceof ExceptionResult && $result->hasException()) {
-      $this->exception = $result->getException();
+            $this->exception = $result->getException();
       if ($this->exception instanceof ArtifactExceptionInterface) {
         $this->attachment[md5_file($this->exception->getScreenPath())] = $this->exception->getScreenPath();
         $this->attachment[md5_file($this->exception->getHtmlPath())] = $this->exception->getHtmlPath();
@@ -369,7 +377,53 @@ class AllureFormatter implements Formatter
     $description = new Description();
     $description->type = DescriptionType::TEXT;
     $description->value = $featureNode->getDescription();
-    return [$this->scopeAnnotation, $description];
+
+    $annotations = [$this->scopeAnnotation, $description];
+
+    if (class_exists('\Yandex\Allure\Adapter\Annotation\Epics')) {
+        $epic = new Epics();
+        $epic->epicNames = [];
+    }
+    $feature = new Features();
+    $feature->featureNames = [];
+    $story = new Stories();
+    $story->stories = [];
+
+    foreach ($this->scopeAnnotation as $tag) {
+      if (isset($epic) && $this->epicTagPrefix) {
+        if (stripos(strtolower($tag), strtolower($this->epicTagPrefix)) === 0) {
+          $epic->epicNames[] = substr($tag, strlen($this->epicTagPrefix));
+        }
+      }
+      if ($this->featureTagPrefix) {
+          if (stripos(strtolower($tag), strtolower($this->featureTagPrefix)) === 0) {
+              $feature->featureNames[] = substr($tag, strlen($this->featureTagPrefix));
+          }
+      }
+      if ($this->storyTagPrefix && $this->storyTagPrefix != '.') {
+        if (stripos(strtolower($tag), strtolower($this->storyTagPrefix)) === 0) {
+          $story->stories[] = substr($tag, strlen($this->storyTagPrefix));
+        }
+      }  
+    }
+
+    if ($this->storyTagPrefix == '.') {
+      $story->stories[] = $featureNode->getTitle();
+    }
+  
+    if (isset($epic) && $epic->getEpicNames())  {
+      array_push($annotations, $epic);
+    }
+
+    if ($feature->getFeatureNames()) {
+      array_push($annotations, $feature);
+    }
+
+    if ($story->getStories()) {
+      array_push($annotations, $story);
+    }
+
+    return $annotations;
   }
 
   protected function parseScenarioAnnotations(ScenarioInterface $scenarioNode)
@@ -432,7 +486,27 @@ class AllureFormatter implements Formatter
         continue;
       }
 
-      $story->stories[] = $tag;
+      if ($this->epicTagPrefix) {
+        if (stripos(strtolower($tag), strtolower($this->epicTagPrefix)) === 0) {
+          continue;
+        }
+      }
+
+      if ($this->featureTagPrefix) {
+        if (stripos(strtolower($tag), strtolower($this->featureTagPrefix)) === 0) {
+          continue;
+        }
+      }
+
+      if ($this->storyTagPrefix) {
+        if ($this->storyTagPrefix == '.'){
+          continue;
+        } elseif (stripos(strtolower($tag), strtolower($this->storyTagPrefix)) === 0) {
+          continue;
+        }
+      } else {
+        $story->stories[] = $tag;
+      }
     }
 
     if ($story->getStories()) {
