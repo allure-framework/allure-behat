@@ -1,16 +1,16 @@
 # Allure Behat Adapter
 
 This is a [Behat](http://behat.org/en/latest/) extension with Formatter that produces report data for [Yandex Allure](http://allure.qatools.ru/) test
-reporting tool.
+reporting tool with eZ Systems modification introducing requirement of eZ Systems `allure-php-commons`.
 
 ## Installation
 
-To install using [Composer](https://getcomposer.org/) simply add `"allure-framework/allure-behat"` to `composer.json`:
+To install using [Composer](https://getcomposer.org/) simply add `"ezsystems/allure-behat"` to `composer.json`:
 
     ...
     "require": {
     ...
-        "allure-framework/allure-behat": "~2.0.0",
+        "ezsystems/allure-behat": "~2.0.0",
     ...
     },
     ...
