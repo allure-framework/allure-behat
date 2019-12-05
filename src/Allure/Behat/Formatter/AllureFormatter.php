@@ -22,23 +22,21 @@ namespace Allure\Behat\Formatter;
 
 use Allure\Behat\Exception\ArtifactExceptionInterface;
 use Allure\Behat\Printer\DummyOutputPrinter;
-use Behat\Behat\EventDispatcher\Event\AfterFeatureTested;
-use Behat\Behat\EventDispatcher\Event\AfterOutlineTested;
 use Behat\Behat\EventDispatcher\Event\AfterScenarioTested;
 use Behat\Behat\EventDispatcher\Event\AfterStepTested;
-use Behat\Behat\EventDispatcher\Event\BeforeFeatureTested;
-use Behat\Behat\EventDispatcher\Event\BeforeOutlineTested;
 use Behat\Behat\EventDispatcher\Event\BeforeScenarioTested;
 use Behat\Behat\EventDispatcher\Event\BeforeStepTested;
+use Behat\Behat\EventDispatcher\Event\ExampleTested;
+use Behat\Behat\EventDispatcher\Event\ScenarioTested;
+use Behat\Behat\EventDispatcher\Event\StepTested;
 use Behat\Behat\Tester\Result\StepResult;
 use Behat\Gherkin\Node\ExampleNode;
 use Behat\Gherkin\Node\FeatureNode;
 use Behat\Gherkin\Node\ScenarioInterface;
 use Behat\Testwork\Counter\Timer;
-use Behat\Testwork\EventDispatcher\Event\AfterExerciseCompleted;
 use Behat\Testwork\EventDispatcher\Event\AfterSuiteTested;
-use Behat\Testwork\EventDispatcher\Event\BeforeExerciseCompleted;
 use Behat\Testwork\EventDispatcher\Event\BeforeSuiteTested;
+use Behat\Testwork\EventDispatcher\Event\SuiteTested;
 use Behat\Testwork\Output\Formatter;
 use Behat\Testwork\Output\Printer\OutputPrinter;
 use Behat\Testwork\Tester\Result\ExceptionResult;
@@ -143,19 +141,16 @@ class AllureFormatter implements Formatter
   public static function getSubscribedEvents()
   {
     return array(
-      'tester.exercise_completed.before' => 'onBeforeExerciseCompleted',
-      'tester.exercise_completed.after' => 'onAfterExerciseCompleted',
-      'tester.suite_tested.before' => 'onBeforeSuiteTested',
-      'tester.suite_tested.after' => 'onAfterSuiteTested',
-      'tester.feature_tested.before' => 'onBeforeFeatureTested',
-      'tester.feature_tested.after' => 'onAfterFeatureTested',
-      'tester.scenario_tested.before' => 'onBeforeScenarioTested',
-      'tester.scenario_tested.after' => 'onAfterScenarioTested',
-      'tester.outline_tested.before' => 'onBeforeOutlineTested',
-      'tester.outline_tested.after' => 'onAfterOutlineTested',
-      'tester.step_tested.before' => 'onBeforeStepTested',
-      'tester.step_tested.after' => 'onAfterStepTested',
+      SuiteTested::BEFORE => 'onBeforeSuiteTested',
+      SuiteTested::AFTER => 'onAfterSuiteTested',
+      ScenarioTested::BEFORE => 'onBeforeScenarioTested',
+      ScenarioTested::AFTER => 'onAfterScenarioTested',
+      StepTested::BEFORE => 'onBeforeStepTested',
+      StepTested::AFTER  => 'onAfterStepTested',
+      ExampleTested::BEFORE => 'onBeforeScenarioTested',
+      ExampleTested::AFTER => 'onAfterScenarioTested',
     );
+
   }
 
   /**
@@ -211,16 +206,6 @@ class AllureFormatter implements Formatter
     return $this->parameters->get($name);
   }
 
-  public function onBeforeExerciseCompleted(BeforeExerciseCompleted $event)
-  {
-
-  }
-
-  public function onAfterExerciseCompleted(AfterExerciseCompleted $event)
-  {
-
-  }
-
   public function onBeforeSuiteTested(BeforeSuiteTested $event)
   {
 
@@ -242,16 +227,6 @@ class AllureFormatter implements Formatter
 
   }
 
-  public function onBeforeFeatureTested(BeforeFeatureTested $event)
-  {
-
-  }
-
-  public function onAfterFeatureTested(AfterFeatureTested $event)
-  {
-
-  }
-
   public function onBeforeScenarioTested(BeforeScenarioTested $event)
   {
     /** @var \Behat\Gherkin\Node\ScenarioNode $scenario */
@@ -259,10 +234,14 @@ class AllureFormatter implements Formatter
     /** @var \Behat\Gherkin\Node\FeatureNode $feature */
     $feature = $event->getFeature();
 
+    $isExample = $scenario instanceof ExampleNode;
+
+    $exampleAnnotations = ($isExample) ? $this->parseExampleAnnotations($scenario->getTokens()) : [];
 
     $annotations = array_merge(
       $this->parseFeatureAnnotations($feature),
-      $this->parseScenarioAnnotations($scenario)
+      $this->parseScenarioAnnotations($scenario),
+      $exampleAnnotations
     );
 
     $annotationManager = new AnnotationManager($annotations);
@@ -270,45 +249,13 @@ class AllureFormatter implements Formatter
     $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
     $annotationManager->updateTestCaseEvent($scenarioEvent);
 
-    $this->getLifeCycle()->fire($scenarioEvent->withTitle($scenario->getTitle()));
+    $scenarioTitle = ($isExample) ? $scenario->getOutlineTitle() : $scenario->getTitle();
+
+    $this->getLifeCycle()->fire($scenarioEvent->withTitle($scenarioTitle));
 
   }
 
   public function onAfterScenarioTested(AfterScenarioTested $event)
-  {
-    $this->processScenarioResult($event->getTestResult());
-  }
-
-  public function onBeforeOutlineTested(BeforeOutlineTested $event)
-  {
-    $examples = $event->getOutline()->getExamples();
-
-    if ($this->outlineCounter >= count($examples)) {
-      $this->outlineCounter = 0;
-    }
-
-    $example = $examples[$this->outlineCounter];
-    $feature = $event->getFeature();
-
-    $scenarioName = sprintf(
-      '%s:%d',
-      $feature->getFile(),
-      $example->getLine()
-    );
-
-    $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
-    $annotations = array_merge(
-      $this->parseFeatureAnnotations($feature),
-      $this->parseScenarioAnnotations($example),
-      $this->parseExampleAnnotations($example->getTokens())
-    );
-    $this->outlineCounter++;
-    $annotationManager = new AnnotationManager($annotations);
-    $annotationManager->updateTestCaseEvent($scenarioEvent);
-    $this->getLifeCycle()->fire($scenarioEvent->withTitle($example->getOutlineTitle()));
-  }
-
-  public function onAfterOutlineTested(AfterOutlineTested $event)
   {
     $this->processScenarioResult($event->getTestResult());
   }
