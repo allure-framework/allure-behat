@@ -302,7 +302,13 @@ class AllureFormatter implements Formatter
   protected function prepareOutputDirectory($outputDirectory)
   {
     if (!file_exists($outputDirectory)) {
-      mkdir($outputDirectory, 0755, true);
+        try {
+            mkdir($outputDirectory, 0755, true);
+        } catch (\ErrorException $ee) {
+            if (!is_dir($outputDirectory)) {
+                throw $ee;
+            }
+        }
     }
 
     if (is_null(Provider::getOutputDirectory())) {
