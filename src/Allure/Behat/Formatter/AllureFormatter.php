@@ -373,7 +373,7 @@ class AllureFormatter implements Formatter
         }
       }
 
-      if (stripos($tag, $this->severity_key) === 0) {
+      if ($this->severity_key && stripos($tag, $this->severity_key) === 0) {
         $level = preg_replace("/$this->severity_key/", '', $tag);
         try {
           $level = ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $level);
