@@ -245,7 +245,8 @@ class AllureFormatter implements Formatter
     );
 
     $annotationManager = new AnnotationManager($annotations);
-    $scenarioName = sprintf('%s:%d', $feature->getFile(), $scenario->getLine());
+    $scenarioFilePath = str_replace($this->base_path . '/', '', $feature->getFile());
+    $scenarioName = sprintf('%s:%d', $scenarioFilePath, $scenario->getLine());
     $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
     $annotationManager->updateTestCaseEvent($scenarioEvent);
 
