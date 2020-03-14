@@ -70,7 +70,7 @@ class FeatureContext implements Context
     }
     $this->workingDir = $dir;
     $this->phpBin = $php;
-    $this->process = new Process(null);
+    $this->process = new Process([]);
     $this->process->setTimeout(20);
   }
 
