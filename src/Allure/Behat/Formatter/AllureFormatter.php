@@ -19,7 +19,6 @@
  */
 namespace Allure\Behat\Formatter;
 
-use Allure\Behat\Exception\ArtifactExceptionInterface;
 use Allure\Behat\Printer\DummyOutputPrinter;
 use Behat\Behat\EventDispatcher\Event\AfterScenarioTested;
 use Behat\Behat\EventDispatcher\Event\AfterStepTested;
@@ -66,7 +65,6 @@ use Yandex\Allure\Adapter\Model\ConstantChecker;
 use Yandex\Allure\Adapter\Model\DescriptionType;
 use Yandex\Allure\Adapter\Model\Provider;
 use Yandex\Allure\Adapter\Model\SeverityLevel;
-use Yandex\Allure\Adapter\Support\AttachmentSupport;
 
 class AllureFormatter implements Formatter
 {
@@ -75,7 +73,6 @@ class AllureFormatter implements Formatter
     protected $base_path;
     protected $timer;
     protected $exception;
-    protected $attachment = [];
     protected $uuid;
     protected $issueTagPrefix;
     protected $testIdTagPrefix;
@@ -92,8 +89,6 @@ class AllureFormatter implements Formatter
     private $lifecycle;
 
     private $scopeAnnotation = [];
-
-    use AttachmentSupport;
 
     public function __construct($name, $issue_tag_prefix, $test_id_tag_prefix, $ignoredTags, $severity_key, $base_path, $presenter)
     {
@@ -207,9 +202,8 @@ class AllureFormatter implements Formatter
     public function onBeforeSuiteTested(BeforeSuiteTested $event)
     {
         AnnotationProvider::addIgnoredAnnotations([]);
-        $this->prepareOutputDirectory(
-      $this->printer->getOutputPath()
-    );
+        $this->prepareOutputDirectory($this->printer->getOutputPath());
+
         $start_event = new TestSuiteStartedEvent($event->getSuite()->getName());
 
         $this->uuid = $start_event->getUuid();
@@ -241,8 +235,7 @@ class AllureFormatter implements Formatter
     );
 
         $annotationManager = new AnnotationManager($annotations);
-        $scenarioFilePath = str_replace($this->base_path . '/', '', $feature->getFile());
-        $scenarioName = sprintf('%s:%d', $scenarioFilePath, $scenario->getLine());
+        $scenarioName = $this->formatScenarioName($feature->getFile(), $scenario->getLine());
         $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
         $annotationManager->updateTestCaseEvent($scenarioEvent);
 
@@ -271,27 +264,21 @@ class AllureFormatter implements Formatter
 
         if ($result instanceof ExceptionResult && $result->hasException()) {
             $this->exception = $result->getException();
-            if ($this->exception instanceof ArtifactExceptionInterface) {
-                $this->attachment[md5_file($this->exception->getScreenPath())] = $this->exception->getScreenPath();
-                $this->attachment[md5_file($this->exception->getHtmlPath())] = $this->exception->getHtmlPath();
-            }
         }
 
-        switch ($event->getTestResult()->getResultCode()) {
-      case StepResult::FAILED:
-        $this->addFailedStep();
-        break;
-      case StepResult::UNDEFINED:
-        $this->addFailedStep();
-        break;
-      case StepResult::PENDING:
-      case StepResult::SKIPPED:
-        $this->addCancelledStep();
-        break;
-      case StepResult::PASSED:
-      default:
-        $this->exception = new \Exception('Error occurred out of test scope.');
-    }
+        switch ($result->getResultCode()) {
+          case StepResult::FAILED:
+          case StepResult::UNDEFINED:
+            $this->addFailedStep();
+            break;
+          case StepResult::PENDING:
+          case StepResult::SKIPPED:
+            $this->addCancelledStep();
+            break;
+          case StepResult::PASSED:
+          default:
+            $this->exception = new \Exception('Error occurred out of test scope.');
+        }
         $this->addFinishedStep();
     }
 
@@ -338,9 +325,6 @@ class AllureFormatter implements Formatter
         $severity = new Severity();
 
         $ignoredTags = [];
-
-        $title = $scenarioNode instanceof ExampleNode ? $scenarioNode->getOutlineTitle() : $scenarioNode->getTitle();
-        //$story->stories[] = $title;
 
         if (is_string($this->ignoredTags)) {
             $ignoredTags = array_map('trim', explode(',', $this->ignoredTags));
@@ -436,13 +420,6 @@ class AllureFormatter implements Formatter
         return $parameters;
     }
 
-    protected function addAttachments()
-    {
-        array_walk($this->attachment, function ($path, $key) {
-            $this->addAttachment($path, $key . '-attachment');
-        });
-    }
-
     private function addCancelledStep()
     {
         $event = new StepCanceledEvent();
@@ -488,10 +465,15 @@ class AllureFormatter implements Formatter
     private function addTestCaseFailed()
     {
         $event = new TestCaseFailedEvent();
-        $event->withException($this->exception)
-      ->withMessage($this->exception->getMessage());
-        $this->addAttachments();
-
+        $event->withException($this->exception)->withMessage($this->exception->getMessage());
         $this->getLifeCycle()->fire($event);
+    }
+
+    private function formatScenarioName(string $fileName, int $lineNumber): string
+    {
+        $parts = explode('/', $fileName);
+        $lastPart = end($parts);
+
+        return sprintf('%s:%d', $lastPart, $lineNumber);
     }
 }
