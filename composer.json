@@ -1,6 +1,6 @@
 {
   "name": "allure-framework/allure-behat",
-  "description": "Behat output formatter for use with Yandex Allure reporting tool",
+  "description": "Allure Behat integration",
   "keywords": [
     "BDD",
     "Behat",
@@ -30,5 +30,8 @@
     "psr-0": {
       "": "src/"
     }
+  },
+  "scripts": {
+    "test": "vendor/bin/behat",
   }
 }
