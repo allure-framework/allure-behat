@@ -32,6 +32,6 @@
     }
   },
   "scripts": {
-    "test": "vendor/bin/behat",
+    "test": "vendor/bin/behat"
   }
 }
