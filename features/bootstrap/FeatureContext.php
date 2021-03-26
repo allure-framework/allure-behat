@@ -295,16 +295,17 @@ EOL;
   {
     $path = $this->findFileByPattern($this->workingDir . DIRECTORY_SEPARATOR . $path);
 
-    $fileContent = trim(file_get_contents($path));
+    $actual = trim(file_get_contents($path));
 
-    $fileContent = preg_replace('/start="(\d+)"/', 'start="-IGNORE-VALUE-"', $fileContent);
-    $fileContent = preg_replace('/stop="(\d+)"/', 'stop="-IGNORE-VALUE-"', $fileContent);
+    $actual = preg_replace('/start="(\d+)"/', 'start="-IGNORE-VALUE-"', $actual);
+    $actual = preg_replace('/stop="(\d+)"/', 'stop="-IGNORE-VALUE-"', $actual);
 
     $dom = new DOMDocument();
     $dom->loadXML($text);
     $dom->formatOutput = true;
+    $expected = trim($dom->saveXML(null));
 
-    Assert::assertEquals(trim($dom->saveXML(null)), $fileContent);
+    Assert::assertThat($actual, Assert::equalTo($expected));
   }
 
 

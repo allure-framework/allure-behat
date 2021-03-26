@@ -266,7 +266,7 @@ class AllureFormatter implements Formatter
     );
 
     $annotationManager = new AnnotationManager($annotations);
-    $scenarioName = sprintf('%s:%d', $feature->getFile(), $scenario->getLine());
+    $scenarioName = sprintf('%s | %s', $feature->getTitle(), $scenario->getTitle());
     $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
     $annotationManager->updateTestCaseEvent($scenarioEvent);
 
