@@ -67,22 +67,22 @@ Feature: Allure Formatter
         <test-cases>
           <test-case start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
             <name>Annotation | Scenario annotation</name>
-            <title>Scenario annotation</title>
+            <title><![CDATA[Scenario annotation]]></title>
             <description type="text"><![CDATA[In order to have meta information of the scenario
       As a features developer
       I want, allure to collect all feature & scenarios tags]]></description>
             <steps>
               <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
-                <name>scenario has annotation</name>
-                <title>Given scenario has annotation</title>
+                <name><![CDATA[scenario has annotation]]></name>
+                <title><![CDATA[Given scenario has annotation]]></title>
               </step>
               <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
-                <name>it passed</name>
-                <title>When it passed</title>
+                <name><![CDATA[it passed]]></name>
+                <title><![CDATA[When it passed]]></title>
               </step>
               <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
-                <name>annotation is collected</name>
-                <title>Then annotation is collected</title>
+                <name><![CDATA[annotation is collected]]></name>
+                <title><![CDATA[Then annotation is collected]]></title>
               </step>
             </steps>
             <labels>
