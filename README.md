@@ -43,6 +43,10 @@ Here:
  - `test_id_tag_prefix` - tag with this prefix will be interpreted as Test Case Id marker and will generate TMS link for
  test case (using [**allure.tests.management.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID))
 
+Optionally, you can add the following options:
+ - `epic_tag_prefix` - tags with this prefix will be added as Allure Epic tags
+ - `feature_tag_prefix` - tags with this prefix will be added as Allure Feature tags
+ - `story_tag_prefix` - tags with this prefix will be added as Allure Story tags, if you set `story_tag_prefix: "."` the story tag will be filled with the name of the feature name
 
 ### Use attachment support
 To have attachments in allure report - make sure your behat runs tests with [Mink](https://github.com/minkphp/Mink)
@@ -85,6 +89,50 @@ Behat also has tags and they are also can be used in Allure reports:
 * If a tag starts with test_id_tag_prefix, then formatter will interpret it's affixed part as
 [Test Case Id](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID) for your TMS
 * In all other cases tag will be parsed as Allure Story annotation
+
+### Alternative configuration
+
+You can change this standard behaviour by setting the `epic_tag_prefix`, `feature_tag_prefix` and `story_tag_prefix`.
+
+#### Example using BDD capabilities and features
+```yml
+feature_tag_prefix: "Capability:"
+story_tag_prefix: "."
+```
+
+A `test.feature` file with the following content:
+
+```
+@Capability:Customers
+    Feature: Creating new customers
+```
+
+Will report the results as:
+```
+Customers
+    Creating new customers
+```
+
+#### Example using BDD business domains, capabilities and features
+```yml
+epic_tag_prefix: "BusinessDomain:"
+feature_tag_prefix: "Capability:"
+story_tag_prefix: "."
+```
+
+A `test.feature` file with the following content:
+
+```
+@BusinessDomain:CRM @Capability:Customers
+    Feature: Creating new customers
+```
+
+Will report the results as:
+```
+CRM
+    Customers
+        Creating new customers
+```
 
 ### Contribution?
 Feel free to open PR with changes but before pls make sure you pass tests

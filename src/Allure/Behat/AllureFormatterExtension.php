@@ -79,6 +79,9 @@ class AllureFormatterExtension implements ExtensionInterface
     $builder->children()->scalarNode("test_id_tag_prefix")->defaultValue(null);
     $builder->children()->scalarNode("ignored_tags")->defaultValue(null);
     $builder->children()->scalarNode("severity_key")->defaultValue(null);
+    $builder->children()->scalarNode("epic_tag_prefix")->defaultValue(null);
+    $builder->children()->scalarNode("feature_tag_prefix")->defaultValue(null);
+    $builder->children()->scalarNode("story_tag_prefix")->defaultValue(null);
   }
 
   /**
@@ -95,6 +98,9 @@ class AllureFormatterExtension implements ExtensionInterface
     $definition->addArgument($config['test_id_tag_prefix']);
     $definition->addArgument($config['ignored_tags']);
     $definition->addArgument($config['severity_key']);
+    $definition->addArgument($config['epic_tag_prefix']);
+    $definition->addArgument($config['feature_tag_prefix']);
+    $definition->addArgument($config['story_tag_prefix']);
     $definition->addArgument('%paths.base%');
     $presenter = new Reference(ExceptionExtension::PRESENTER_ID);
     $definition->addArgument($presenter);
