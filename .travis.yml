@@ -22,10 +22,6 @@ branches:
 
 jobs:
   include:
-    - name: "Code Style Check"
-      env: CHECK_CS=1
-    - name: "Unit tests"
-      env: PHPUNIT_CONFIG='phpunit.xml'
     - name: "Allure Behat tests"
       php: 7.3
       env: RUN_ALLURE_BEHAT=1
@@ -55,13 +51,11 @@ before_install:
 
 install:
   # Install packages if needed
-  - if [ "${CHECK_CS}" == "1" -o "${PHPUNIT_CONFIG}" != "" -o "${RUN_ALLURE_BEHAT}" == "1" ]; then travis_retry composer install --prefer-dist --no-interaction --no-suggest ; fi
+  - if [ "${RUN_ALLURE_BEHAT}" == "1" ]; then travis_retry composer install --prefer-dist --no-interaction --no-suggest ; fi
   # Prepare whole environment if needed
   - if [ "${BEHAT_OPTS}" != "" ]; then ./bin/.travis/prepare_ezplatform.sh ; fi
 
 script:
-  - if [ "${CHECK_CS}" == "1" ] ; then ./vendor/bin/php-cs-fixer fix -v --dry-run --show-progress=estimating ; fi
-  - if [ "${PHPUNIT_CONFIG}" != '' ]; then ./vendor/bin/phpunit -c "${PHPUNIT_CONFIG}"; fi
   - if [ "${RUN_ALLURE_BEHAT}" != '' ]; then ./vendor/behat/behat/bin/behat; fi
   - if [ "${BEHAT_OPTS}" != "" ]; then cd "$HOME/build/ezplatform"; docker-compose exec --user www-data app sh -c "bin/ezbehat $BEHAT_OPTS" ; fi
 
