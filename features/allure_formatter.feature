@@ -58,6 +58,17 @@ Feature: Allure Formatter
           When it passed
           Then annotation is collected
       """
+    And a file named "features/World2.feature" with:
+      """
+      @tag_feature @severity:blocker @JIRA:PROD-4444
+      Feature: Descriptionless feature
+
+        @tag_scenario @BUG:7654 @tag_ignore
+        Scenario: Scenario annotation
+          Given scenario has annotation
+          When it passed
+          Then annotation is collected
+      """
     When I run "behat --no-colors -f allure -o allure-results"
     Then "allure-results/*testsuite.xml" file xml should be like:
       """
@@ -71,6 +82,31 @@ Feature: Allure Formatter
             <description type="text"><![CDATA[In order to have meta information of the scenario
       As a features developer
       I want, allure to collect all feature & scenarios tags]]></description>
+            <steps>
+              <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
+                <name><![CDATA[scenario has annotation]]></name>
+                <title><![CDATA[Given scenario has annotation]]></title>
+              </step>
+              <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
+                <name><![CDATA[it passed]]></name>
+                <title><![CDATA[When it passed]]></title>
+              </step>
+              <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
+                <name><![CDATA[annotation is collected]]></name>
+                <title><![CDATA[Then annotation is collected]]></title>
+              </step>
+            </steps>
+            <labels>
+              <label name="severity" value="blocker"/>
+              <label name="story" value="tag_feature"/>
+              <label name="story" value="tag_scenario"/>
+              <label name="issue" value="PROD-4444"/>
+              <label name="testId" value="7654"/>
+            </labels>
+          </test-case>
+          <test-case start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
+            <name>Descriptionless feature | Scenario annotation</name>
+            <title><![CDATA[Scenario annotation]]></title>
             <steps>
               <step start="-IGNORE-VALUE-" stop="-IGNORE-VALUE-" status="passed">
                 <name><![CDATA[scenario has annotation]]></name>
