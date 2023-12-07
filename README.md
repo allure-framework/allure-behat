@@ -1,6 +1,6 @@
 # Allure Behat Adapter
 
-This is a [Behat](http://behat.org/en/latest/) extension with Formatter that produces report data for [Yandex Allure](http://allure.qatools.ru/) test
+This is a [Behat](http://behat.org/en/latest/) extension with Formatter that produces report data for [Allure Report](https://allurereport.org/) test
 reporting tool.
 
 ## Installation
@@ -39,9 +39,9 @@ Here:
  - `severity_key` - tag with this prefix will be interpreted (if possible) to define the Scenario severity level
  in reports (by default it's `normal`).
  - `issue_tag_prefix` - tag with this prefix will be interpreted as Issue marker and will generate issue tracking system
- link for test case (using [**allure.issues.tracker.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Issues))
+ link for test case
  - `test_id_tag_prefix` - tag with this prefix will be interpreted as Test Case Id marker and will generate TMS link for
- test case (using [**allure.tests.management.pattern** setting for allure-cli](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID))
+ test case
 
 
 ### Use attachment support
@@ -83,7 +83,7 @@ Behat also has tags and they are also can be used in Allure reports:
 * If a tag starts with severity_tag_prefix, then formatter will try to interpret it's affixed part as one of the possible
 [Allure Severity Levels](https://github.com/allure-framework/allure-php-adapter-api/blob/master/src/Yandex/Allure/Adapter/Model/SeverityLevel.php)
 * If a tag starts with test_id_tag_prefix, then formatter will interpret it's affixed part as
-[Test Case Id](https://github.com/allure-framework/allure-core/wiki/Test-Case-ID) for your TMS
+Test Case Id for your TMS
 * In all other cases tag will be parsed as Allure Story annotation
 
 ### Contribution?
