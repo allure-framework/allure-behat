@@ -1,6 +1,7 @@
 {
   "name": "allure-framework/allure-behat",
   "description": "Allure Behat integration",
+  "homepage": "https://allurereport.org/",
   "keywords": [
     "BDD",
     "Behat",
