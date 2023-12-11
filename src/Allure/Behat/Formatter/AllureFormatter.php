@@ -420,16 +420,18 @@ class AllureFormatter implements Formatter
         }
       }
 
-      if (stripos($tag, $this->severity_key) === 0) {
-        $level = preg_replace("/$this->severity_key/", '', $tag);
-        try {
-          $level = ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $level);
-          $severity->level = $level;
-        } catch (AllureException $e) {
-          $severity->level = SeverityLevel::NORMAL;
+      if ($this->severity_key) {
+        if (stripos($tag, $this->severity_key) === 0) {
+          $level = preg_replace("/$this->severity_key/", '', $tag);
+          try {
+            $level = ConstantChecker::validate('Yandex\Allure\Adapter\Model\SeverityLevel', $level);
+            $severity->level = $level;
+          } catch (AllureException $e) {
+            $severity->level = SeverityLevel::NORMAL;
+          }
+          array_push($annotations, $severity);
+          continue;
         }
-        array_push($annotations, $severity);
-        continue;
       }
 
       $story->stories[] = $tag;
