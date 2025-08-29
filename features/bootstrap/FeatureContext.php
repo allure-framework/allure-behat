@@ -26,7 +26,7 @@ class FeatureContext implements Context
    */
   private $phpBin;
   /**
-   * @var Process
+   * @var ?Process
    */
   private $process;
   /**
@@ -37,6 +37,18 @@ class FeatureContext implements Context
    * @var string
    */
   private $options = '--format-settings=\'{"timer": false}\' --no-interaction';
+  /**
+   * @var array<string,string>
+   */
+  private $env;
+  /**
+   * @var ?string
+   */
+  private $input;
+  /**
+   * @var float
+   */
+  private $timeout;
 
   /**
    * Cleans test folders in the temporary directory.
@@ -69,9 +81,9 @@ class FeatureContext implements Context
       throw new \RuntimeException('Unable to find the PHP executable.');
     }
     $this->workingDir = $dir;
+    $this->env = [];
     $this->phpBin = $php;
-    $this->process = new Process(null);
-    $this->process->setTimeout(20);
+    $this->timeout = 20;
   }
 
   /**
@@ -169,7 +181,7 @@ EOL;
    */
   public function iSetEnvironmentVariable(PyStringNode $value)
   {
-    $this->process->setEnv(array('BEHAT_PARAMS' => (string) $value));
+    $this->env = ['BEHAT_PARAMS' => (string) $value];
   }
 
   /**
@@ -183,25 +195,29 @@ EOL;
   {
     $argumentsString = strtr($argumentsString, array('\'' => '"'));
 
-    $this->process->setWorkingDirectory($this->workingDir);
-    $this->process->setCommandLine(
-      sprintf(
-        '%s %s %s %s',
-        $this->phpBin,
-        escapeshellarg(BEHAT_BIN_PATH),
-        $argumentsString,
-        strtr($this->options, array('\'' => '"', '"' => '\"'))
-      )
-    );
-
     // Don't reset the LANG variable on HHVM, because it breaks HHVM itself
     if (!defined('HHVM_VERSION')) {
-      $env = $this->process->getEnv();
-      $env['LANG'] = 'en'; // Ensures that the default language is en, whatever the OS locale is.
-      $this->process->setEnv($env);
+      $this->env['LANG'] = 'en'; // Ensures that the default language is en, whatever the OS locale is.
     }
 
-    $this->process->run();
+    $this->process = Process::fromShellCommandline(
+      sprintf(
+        '"${:PHP_BIN_PATH}" "${:BEHAT_SCRIPT_PATH}" %s %s',
+        $argumentsString,
+        strtr($this->options, array('\'' => '"', '"' => '\"')),
+      ),
+      $this->workingDir,
+      $this->env,
+      $this->input,
+      $this->timeout,
+    );
+    $this->process->run(
+      null,
+      [
+        'PHP_BIN_PATH' => $this->phpBin,
+        'BEHAT_SCRIPT_PATH' => BEHAT_BIN_PATH,
+      ]
+    );
   }
 
   /**
@@ -214,11 +230,9 @@ EOL;
    */
   public function iRunBehatInteractively($answerString, $argumentsString)
   {
-    $env = $this->process->getEnv();
-    $env['SHELL_INTERACTIVE'] = true;
+    $this->env['SHELL_INTERACTIVE'] = true;
 
-    $this->process->setEnv($env);
-    $this->process->setInput($answerString);
+    $this->input = $answerString;
 
     $this->options = '--format-settings=\'{"timer": false}\'';
     $this->iRunBehat($argumentsString);

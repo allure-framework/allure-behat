@@ -5,10 +5,16 @@ on:
     branches:
       - master
 
+permissions:
+  contents: read
+
 jobs:
   update_draft_release:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
     steps:
-      - uses: toolmantim/release-drafter@v5.15.0
+      - uses: toolmantim/release-drafter@v6.1.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
