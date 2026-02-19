@@ -366,10 +366,13 @@ class AllureFormatter implements Formatter
   protected function parseFeatureAnnotations(FeatureNode $featureNode)
   {
     $this->scopeAnnotation = $featureNode->getTags();
-    $description = new Description();
-    $description->type = DescriptionType::TEXT;
-    $description->value = $featureNode->getDescription();
-    return [$this->scopeAnnotation, $description];
+    if ($featureNode->getDescription()) {
+      $description = new Description();
+      $description->type = DescriptionType::TEXT;
+      $description->value = $featureNode->getDescription();
+      return [$this->scopeAnnotation, $description];
+    }
+    return [$this->scopeAnnotation];
   }
 
   protected function parseScenarioAnnotations(ScenarioInterface $scenarioNode)
