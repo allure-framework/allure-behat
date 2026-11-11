@@ -23,13 +23,12 @@ namespace Allure\Behat\Formatter;
 use Allure\Behat\Exception\ArtifactExceptionInterface;
 use Allure\Behat\Printer\DummyOutputPrinter;
 use Behat\Behat\EventDispatcher\Event\AfterFeatureTested;
-use Behat\Behat\EventDispatcher\Event\AfterOutlineTested;
 use Behat\Behat\EventDispatcher\Event\AfterScenarioTested;
 use Behat\Behat\EventDispatcher\Event\AfterStepTested;
 use Behat\Behat\EventDispatcher\Event\BeforeFeatureTested;
-use Behat\Behat\EventDispatcher\Event\BeforeOutlineTested;
 use Behat\Behat\EventDispatcher\Event\BeforeScenarioTested;
 use Behat\Behat\EventDispatcher\Event\BeforeStepTested;
+use Behat\Behat\EventDispatcher\Event\ExampleTested;
 use Behat\Behat\Tester\Result\StepResult;
 use Behat\Gherkin\Node\ExampleNode;
 use Behat\Gherkin\Node\FeatureNode;
@@ -87,7 +86,6 @@ class AllureFormatter implements Formatter
   protected $severity_key;
   protected $parameters;
   protected $printer;
-  protected $outlineCounter = 0;
 
   /** @var  \Behat\Testwork\Exception\ExceptionPresenter */
   protected $presenter;
@@ -151,8 +149,8 @@ class AllureFormatter implements Formatter
       'tester.feature_tested.after' => 'onAfterFeatureTested',
       'tester.scenario_tested.before' => 'onBeforeScenarioTested',
       'tester.scenario_tested.after' => 'onAfterScenarioTested',
-      'tester.outline_tested.before' => 'onBeforeOutlineTested',
-      'tester.outline_tested.after' => 'onAfterOutlineTested',
+      ExampleTested::BEFORE => 'onBeforeScenarioTested',
+      ExampleTested::AFTER => 'onAfterScenarioTested',
       'tester.step_tested.before' => 'onBeforeStepTested',
       'tester.step_tested.after' => 'onAfterStepTested',
     );
@@ -254,61 +252,34 @@ class AllureFormatter implements Formatter
 
   public function onBeforeScenarioTested(BeforeScenarioTested $event)
   {
-    /** @var \Behat\Gherkin\Node\ScenarioNode $scenario */
     $scenario = $event->getScenario();
-    /** @var \Behat\Gherkin\Node\FeatureNode $feature */
     $feature = $event->getFeature();
 
+    $this->exception = null;
+    $this->attachment = [];
 
     $annotations = array_merge(
       $this->parseFeatureAnnotations($feature),
       $this->parseScenarioAnnotations($scenario)
     );
 
+    if ($scenario instanceof ExampleNode) {
+      $scenarioName = sprintf('%s:%d', $feature->getFile(), $scenario->getLine());
+      $title = $scenario->getOutlineTitle();
+      $annotations = array_merge($annotations, $this->parseExampleAnnotations($scenario->getTokens()));
+    } else {
+      $title = $scenario->getTitle();
+      $scenarioName = sprintf('%s | %s', $feature->getTitle(), $title);
+    }
+
     $annotationManager = new AnnotationManager($annotations);
-    $scenarioName = sprintf('%s | %s', $feature->getTitle(), $scenario->getTitle());
     $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
     $annotationManager->updateTestCaseEvent($scenarioEvent);
 
-    $this->getLifeCycle()->fire($scenarioEvent->withTitle($scenario->getTitle()));
-
+    $this->getLifeCycle()->fire($scenarioEvent->withTitle($title));
   }
 
   public function onAfterScenarioTested(AfterScenarioTested $event)
-  {
-    $this->processScenarioResult($event->getTestResult());
-  }
-
-  public function onBeforeOutlineTested(BeforeOutlineTested $event)
-  {
-    $examples = $event->getOutline()->getExamples();
-
-    if ($this->outlineCounter >= count($examples)) {
-      $this->outlineCounter = 0;
-    }
-
-    $example = $examples[$this->outlineCounter];
-    $feature = $event->getFeature();
-
-    $scenarioName = sprintf(
-      '%s:%d',
-      $feature->getFile(),
-      $example->getLine()
-    );
-
-    $scenarioEvent = new TestCaseStartedEvent($this->uuid, $scenarioName);
-    $annotations = array_merge(
-      $this->parseFeatureAnnotations($feature),
-      $this->parseScenarioAnnotations($example),
-      $this->parseExampleAnnotations($example->getTokens())
-    );
-    $this->outlineCounter++;
-    $annotationManager = new AnnotationManager($annotations);
-    $annotationManager->updateTestCaseEvent($scenarioEvent);
-    $this->getLifeCycle()->fire($scenarioEvent->withTitle($example->getOutlineTitle()));
-  }
-
-  public function onAfterOutlineTested(AfterOutlineTested $event)
   {
     $this->processScenarioResult($event->getTestResult());
   }
@@ -345,9 +316,6 @@ class AllureFormatter implements Formatter
       case StepResult::SKIPPED:
         $this->addCancelledStep();
         break;
-      case StepResult::PASSED:
-      default:
-        $this->exception = new \Exception('Error occurred out of test scope.');
     }
     $this->addFinishedStep();
   }
@@ -389,9 +357,6 @@ class AllureFormatter implements Formatter
     $severity = new Severity();
 
     $ignoredTags = [];
-
-    $title = $scenarioNode instanceof ExampleNode ? $scenarioNode->getOutlineTitle() : $scenarioNode->getTitle();
-    //$story->stories[] = $title;
 
     if (is_string($this->ignoredTags)) {
       $ignoredTags = array_map('trim', explode(',', $this->ignoredTags));
@@ -468,10 +433,6 @@ class AllureFormatter implements Formatter
       case StepResult::SKIPPED:
         $this->addTestCaseCancelled();
         break;
-      case StepResult::PASSED:
-      default:
-        $this->exception = new \Exception('Error occurred out of test scope.');
-
     }
     $this->addTestCaseFinished();
   }
@@ -550,9 +511,10 @@ class AllureFormatter implements Formatter
   private function addTestCaseFailed()
   {
 
+    $exception = $this->exception ?? new \Exception('Error occurred out of test scope.');
     $event = new TestCaseFailedEvent();
-    $event->withException($this->exception)
-      ->withMessage($this->exception->getMessage());
+    $event->withException($exception)
+      ->withMessage($exception->getMessage());
     $this->addAttachments();
 
     $this->getLifeCycle()->fire($event);
