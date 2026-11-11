@@ -322,6 +322,21 @@ EOL;
     Assert::assertThat($actual, Assert::equalTo($expected));
   }
 
+  /** @Then /^"([^"]*)" file xml should satisfy:$/ */
+  public function fileXmlShouldSatisfy($path, PyStringNode $expressions)
+  {
+    $dom = new DOMDocument();
+    $dom->load($this->findFileByPattern($this->workingDir . DIRECTORY_SEPARATOR . $path));
+    $xpath = new DOMXPath($dom);
+    $xpath->registerNamespace('alr', 'urn:model.allure.qatools.yandex.ru');
+
+    foreach ($expressions->getStrings() as $expression) {
+      if ($xpath->evaluate($expression) !== true) {
+        throw new RuntimeException('XML did not satisfy XPath: ' . $expression);
+      }
+    }
+  }
+
 
   /**
    * Checks whether last command output contains provided string.

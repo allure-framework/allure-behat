@@ -96,3 +96,47 @@ Feature: Allure Formatter
         </test-cases>
       </alr:test-suite>
       """
+
+  Scenario: Each outline example has its own result
+    Given a file named "behat.yml" with:
+      """
+      default:
+        extensions:
+          Allure\Behat\AllureFormatterExtension: ~
+      """
+    And a file named "features/bootstrap/FeatureContext.php" with:
+      """
+      <?php
+      use Behat\Behat\Context\Context;
+
+      class FeatureContext implements Context
+      {
+          /** @Given the value is :value */
+          public function checkValue($value) {
+              if ($value === 'bad') {
+                  throw new RuntimeException('Invalid value: ' . $value);
+              }
+          }
+      }
+      """
+    And a file named "features/Outline.feature" with:
+      """
+      Feature: Outline results
+        Scenario Outline: Validate a value
+          Given the value is <value>
+
+          Examples:
+            | value |
+            | bad   |
+            | good  |
+      """
+    When I run "behat --no-colors -f allure -o allure-results"
+    Then it should fail
+    And "allure-results/*testsuite.xml" file xml should satisfy:
+      """
+      count(/alr:test-suite/test-cases/test-case) = 2
+      count(//test-case[@status='failed' and title='Validate a value' and parameters/parameter[@name='value' and @value='bad'] and count(steps/step)=1 and steps/step/name='the value is bad' and failure/message='Invalid value: bad']) = 1
+      count(//test-case[@status='passed' and title='Validate a value' and parameters/parameter[@name='value' and @value='good'] and count(steps/step)=1 and steps/step/name='the value is good' and not(failure)]) = 1
+      count(//test-case[contains(name, 'Outline.feature:7')]) = 1
+      count(//test-case[contains(name, 'Outline.feature:8')]) = 1
+      """
